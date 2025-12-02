@@ -1,0 +1,533 @@
+// ======================================================
+//  PRISMA SCHEMA — SaaS Multi-tenant (Prisma 6 compatible)
+// ======================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// ======================================================
+//  USERS — Compte global (plateforme)
+// ======================================================
+
+model User {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  email         String?     @unique
+  password      String?
+  prenom        String
+  nom           String
+  phone         String?
+  avatar        String?
+  role          UserRole    @default(MEMBER)
+  isActive      Boolean     @default(true)
+
+  // Self-Service
+  canCreateOrganization Boolean @default(true)
+
+  // ⚠️ loginCode supprimé
+  // Identifiant unique maintenant géré dans Membership
+
+  memberships   Membership[]
+  organizations Organization[] @relation("OwnedOrganizations")
+  auditLogs     AuditLog[]
+
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  lastLoginAt   DateTime?
+
+  @@map("users")
+}
+
+// ======================================================
+//  ORGANIZATIONS — Espace indépendant (tenant)
+// ======================================================
+
+model Organization {
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  name          String
+  description   String?
+  type          OrganizationType
+  logo          String?
+  currency      String      @default("XOF")
+
+  ownerId       String      @db.ObjectId
+  owner         User        @relation("OwnedOrganizations", fields: [ownerId], references: [id])
+
+  settingsId    String      @unique @db.ObjectId
+  settings      OrganizationSettings @relation(fields: [settingsId], references: [id])
+
+  address       String?
+  city          String?
+  country       String      @default("Sénégal")
+
+  isActive      Boolean     @default(true)
+
+  subscription  Subscription?
+
+  members       Membership[]
+  contributionPlans ContributionPlan[]
+  contributions Contribution[]
+  debts         Debt[]
+  transactions  Transaction[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("organizations")
+}
+
+// ======================================================
+//  ORGANIZATION SETTINGS
+// ======================================================
+
+model OrganizationSettings {
+  id                    String    @id @default(auto()) @map("_id") @db.ObjectId
+
+  allowPartialPayments  Boolean   @default(false)
+  autoReminders         Boolean   @default(true)
+  reminderDays          Int[]     @default([1, 3, 7])
+
+  emailNotifications    Boolean   @default(true)
+  smsNotifications      Boolean   @default(false)
+  whatsappNotifications Boolean   @default(false)
+
+  sessionTimeout        Int       @default(60)
+
+  organization          Organization?
+
+  @@map("organization_settings")
+}
+
+// ======================================================
+//  MEMBERSHIP — User <-> Organization
+//  ❗ loginId ajouté ici (nouvelle logique)
+// ======================================================
+
+model Membership {
+  id             String         @id @default(auto()) @map("_id") @db.ObjectId
+  userId         String         @db.ObjectId
+  organizationId String         @db.ObjectId
+
+  role           MembershipRole @default(MEMBER)
+
+  // Nouveau login unique
+  loginId        String         @unique
+
+  memberNumber   String?
+  joinDate       DateTime        @default(now())
+  status         MembershipStatus @default(ACTIVE)
+
+  user           User         @relation(fields: [userId], references: [id])
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  contributions  Contribution[]
+  debts          Debt[]
+  profile        MemberProfile?
+  transactions   Transaction[]
+  notifications  Notification[]
+  auditLogs      AuditLog[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, organizationId])
+  @@unique([organizationId, memberNumber])
+  @@map("memberships")
+}
+
+// ======================================================
+//  MEMBER PROFILE — informations avancées
+// ======================================================
+
+model MemberProfile {
+  id           String      @id @default(auto()) @map("_id") @db.ObjectId
+  membershipId String      @unique @db.ObjectId
+
+  membership   Membership  @relation(fields: [membershipId], references: [id])
+
+  photo        String?
+  dateOfBirth  DateTime?
+  gender       Gender?
+  profession   String?
+  emergencyContact String?
+
+  address      String?
+  city         String?
+
+  idNumber     String?
+  idType       String?
+
+  @@map("member_profiles")
+}
+
+// ======================================================
+//  CONTRIBUTION PLANS
+// ======================================================
+
+model ContributionPlan {
+  id             String        @id @default(auto()) @map("_id") @db.ObjectId
+  name           String
+  description    String?
+  amount         Float
+  frequency      ContributionFrequency
+  currency       String @default("XOF")
+  isActive       Boolean @default(true)
+
+  startDate      DateTime
+  endDate        DateTime?
+
+  organizationId String @db.ObjectId
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  contributions  Contribution[]
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("contribution_plans")
+}
+
+// ======================================================
+//  CONTRIBUTIONS
+// ======================================================
+
+model Contribution {
+  id                  String            @id @default(auto()) @map("_id") @db.ObjectId
+
+  membershipId        String            @db.ObjectId
+  contributionPlanId  String            @db.ObjectId
+  organizationId      String            @db.ObjectId
+
+  amount              Float
+  amountPaid          Float             @default(0)
+  paymentDate         DateTime?
+  dueDate             DateTime
+  status              ContributionStatus @default(PENDING)
+
+  paymentMethod       PaymentMethod?
+  transactionId       String? @unique @db.ObjectId
+
+  membership          Membership        @relation(fields: [membershipId], references: [id])
+  contributionPlan    ContributionPlan  @relation(fields: [contributionPlanId], references: [id])
+  organization        Organization      @relation(fields: [organizationId], references: [id])
+  transaction         Transaction?      @relation(fields: [transactionId], references: [id])
+
+  partialPayments     PartialPayment[]
+
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@map("contributions")
+}
+
+// ======================================================
+//  PARTIAL PAYMENTS
+// ======================================================
+
+model PartialPayment {
+  id              String     @id @default(auto()) @map("_id") @db.ObjectId
+  contributionId  String     @db.ObjectId
+
+  amount          Float
+  paymentDate     DateTime   @default(now())
+  paymentMethod   PaymentMethod?
+
+  contribution    Contribution @relation(fields: [contributionId], references: [id])
+
+  @@map("partial_payments")
+}
+
+// ======================================================
+//  DEBTS
+// ======================================================
+
+model Debt {
+  id              String     @id @default(auto()) @map("_id") @db.ObjectId
+
+  membershipId    String     @db.ObjectId
+  organizationId  String     @db.ObjectId
+
+  title           String
+  description     String?
+  initialAmount   Float
+  remainingAmount Float
+  dueDate         DateTime?
+
+  status          DebtStatus @default(ACTIVE)
+
+  membership      Membership @relation(fields: [membershipId], references: [id])
+  organization    Organization @relation(fields: [organizationId], references: [id])
+  repayments      Repayment[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("debts")
+}
+
+// ======================================================
+//  REPAYMENTS
+// ======================================================
+
+model Repayment {
+  id             String     @id @default(auto()) @map("_id") @db.ObjectId
+
+  debtId         String     @db.ObjectId
+  amount         Float
+  paymentDate    DateTime    @default(now())
+  paymentMethod  PaymentMethod?
+
+  transactionId  String?     @unique @db.ObjectId
+
+  debt           Debt         @relation(fields: [debtId], references: [id])
+  transaction    Transaction? @relation(fields: [transactionId], references: [id])
+
+  @@map("repayments")
+}
+
+// ======================================================
+//  TRANSACTIONS
+// ======================================================
+
+model Transaction {
+  id             String     @id @default(auto()) @map("_id") @db.ObjectId
+
+  organizationId String     @db.ObjectId
+  membershipId   String?    @db.ObjectId
+
+  type           TransactionType
+  amount         Float
+  currency       String @default("XOF")
+  description    String?
+
+  paymentMethod  PaymentMethod
+  paymentStatus  PaymentStatus @default(COMPLETED)
+  reference      String? @unique
+
+  metadata       Json?
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  membership     Membership?  @relation(fields: [membershipId], references: [id])
+  contribution   Contribution?
+  repayment      Repayment?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("transactions")
+}
+
+// ======================================================
+//  NOTIFICATIONS
+// ======================================================
+
+model Notification {
+  id             String          @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId String          @db.ObjectId
+  membershipId   String?         @db.ObjectId
+
+  type           NotificationType
+  title          String
+  message        String
+  priority       NotificationPriority @default(MEDIUM)
+
+  channels       NotificationChannel[]
+  status         NotificationStatus @default(PENDING)
+  sentAt         DateTime?
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  membership     Membership?  @relation(fields: [membershipId], references: [id])
+
+  createdAt      DateTime @default(now())
+
+  @@map("notifications")
+}
+
+// ======================================================
+//  SUBSCRIPTIONS
+// ======================================================
+
+model Subscription {
+  id             String       @id @default(auto()) @map("_id") @db.ObjectId
+  organizationId String       @unique @db.ObjectId
+
+  organization   Organization @relation(fields: [organizationId], references: [id])
+
+  plan           SubscriptionPlan
+  status         SubscriptionStatus @default(ACTIVE)
+
+  startDate      DateTime
+  endDate        DateTime?
+
+  maxMembers     Int
+  currentUsage   Int @default(0)
+
+  price          Float
+  currency       String @default("XOF")
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("subscriptions")
+}
+
+// ======================================================
+//  AUDIT LOGS
+// ======================================================
+
+model AuditLog {
+  id             String     @id @default(auto()) @map("_id") @db.ObjectId
+
+  organizationId String?    @db.ObjectId
+  userId         String     @db.ObjectId
+  membershipId   String?    @db.ObjectId
+
+  action         String
+  resource       String
+  resourceId     String?
+  details        Json?
+
+  ipAddress      String?
+  userAgent      String?
+
+  organization   Organization? @relation(fields: [organizationId], references: [id])
+  user           User          @relation(fields: [userId], references: [id])
+  membership     Membership?   @relation(fields: [membershipId], references: [id])
+
+  createdAt      DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
+// ======================================================
+// ENUMS
+// ======================================================
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  MEMBER
+}
+
+enum OrganizationType {
+  DAHIRA
+  ASSOCIATION
+  TONTINE
+  GROUPEMENT
+}
+
+enum MembershipRole {
+  ADMIN
+  FINANCIAL_MANAGER
+  MEMBER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum ContributionFrequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+  CUSTOM
+}
+
+enum ContributionStatus {
+  PENDING
+  PAID
+  PARTIAL
+  OVERDUE
+  CANCELLED
+}
+
+enum DebtStatus {
+  ACTIVE
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum TransactionType {
+  CONTRIBUTION
+  DEBT_REPAYMENT
+  FINE
+  DONATION
+  EXPENSE
+  OTHER
+}
+
+enum PaymentMethod {
+  CASH
+  MOBILE_MONEY
+  BANK_TRANSFER
+  CHECK
+  CREDIT_CARD
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum NotificationType {
+  CONTRIBUTION_REMINDER
+  DEBT_REMINDER
+  PAYMENT_CONFIRMATION
+  MEMBERSHIP_UPDATE
+  SYSTEM_ALERT
+}
+
+enum NotificationPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  DELIVERED
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+  IN_APP
+}
+
+enum SubscriptionPlan {
+  FREE
+  BASIC
+  PREMIUM
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  CANCELLED
+  EXPIRED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
