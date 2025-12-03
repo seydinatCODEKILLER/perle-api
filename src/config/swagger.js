@@ -4,13 +4,13 @@ export const swaggerOptions = {
   definition: {
     openapi: "3.0.0",
     info: {
-      title: "MoneyWise API",
+      title: "Perle API",
       version: "1.0.0",
       description:
-        "API complète de gestion financière MoneyWise - Gestion des transactions, catégories, dashboard, alertes et rapports",
+        "API complète de gestion de dahira - Gestion des transactions, catégories, dashboard, alertes et rapports",
       contact: {
-        name: "Support MoneyWise",
-        email: "support@moneywise.com",
+        name: "Support Perle",
+        email: "support@perle.com",
       },
       license: {
         name: "MIT",
@@ -23,7 +23,7 @@ export const swaggerOptions = {
         description: "Serveur de développement",
       },
       {
-        url: "https://moneywise-9crf.onrender.com",
+        url: "https://perle-api.onrender.com",
         description: "Serveur de production",
       },
     ],
