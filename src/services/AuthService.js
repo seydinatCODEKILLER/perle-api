@@ -14,8 +14,7 @@ export default class AuthService {
   }
 
   async register(userData) {
-    const { prenom, nom, email, password, phone, avatarFile } =
-      userData;
+    const { prenom, nom, email, password, phone, avatarFile } = userData;
 
     // Vérification si l'email existe déjà
     const existingUser = await prisma.user.findUnique({
@@ -95,20 +94,29 @@ export default class AuthService {
     }
   }
 
-  async login(email, password) {
+  async login(phone, password) {
+    // Chercher l'utilisateur par téléphone
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { phone },
     });
 
-    if (!user) throw new Error("Email ou mot de passe incorrect");
+    if (!user) throw new Error("Numéro de téléphone ou mot de passe incorrect");
     if (!user.isActive) throw new Error("Compte utilisateur inactif");
+
+    // Vérifier si le mot de passe est défini
+    if (!user.password) {
+      throw new Error(
+        "Aucun mot de passe défini. Veuillez réinitialiser votre mot de passe."
+      );
+    }
 
     const isPasswordValid = await this.passwordHasher.compare(
       password,
       user.password
     );
 
-    if (!isPasswordValid) throw new Error("Email ou mot de passe incorrect");
+    if (!isPasswordValid)
+      throw new Error("Numéro de téléphone ou mot de passe incorrect");
 
     // Mise à jour de la dernière connexion
     await prisma.user.update({
@@ -116,8 +124,10 @@ export default class AuthService {
       data: { lastLoginAt: new Date() },
     });
 
+    // Génération du token
     const token = this.tokenGenerator.sign({
       id: user.id,
+      phone: user.phone,
       email: user.email,
       role: user.role,
       canCreateOrganization: user.canCreateOrganization,

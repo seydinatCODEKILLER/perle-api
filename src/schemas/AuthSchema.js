@@ -38,7 +38,9 @@ export default class AuthSchema {
 
   validateLogin(data) {
     const schema = z.object({
-      email: z.string().email({ message: "Adresse email invalide" }),
+      phone: z
+        .string()
+        .min(9, { message: "Le numéro de téléphone est invalide" }),
       password: z.string().min(1, { message: "Le mot de passe est requis" }),
     });
 

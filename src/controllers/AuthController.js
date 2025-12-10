@@ -35,9 +35,9 @@ export default class AuthController {
     try {
       // Validation des données
       this.schema.validateLogin(req.body);
-      const { email, password } = req.body;
+      const { phone, password } = req.body;
 
-      const result = await this.service.login(email, password);
+      const result = await this.service.login(phone, password);
 
       return res.success(result, "Connexion réussie");
     } catch (error) {

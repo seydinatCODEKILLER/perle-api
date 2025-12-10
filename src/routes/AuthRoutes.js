@@ -276,14 +276,26 @@ export default class AuthRoutes {
      * @swagger
      * /api/auth/login:
      *   post:
-     *     summary: Connexion avec email et mot de passe
+     *     summary: Connexion avec téléphone et mot de passe
      *     tags: [Authentication]
      *     requestBody:
      *       required: true
      *       content:
      *         application/json:
      *           schema:
-     *             $ref: '#/components/schemas/LoginRequest'
+     *             type: object
+     *             required:
+     *               - phone
+     *               - password
+     *             properties:
+     *               phone:
+     *                 type: string
+     *                 description: Numéro de téléphone (format international)
+     *                 example: "+221771234567"
+     *               password:
+     *                 type: string
+     *                 format: password
+     *                 example: "motdepasse123"
      *     responses:
      *       200:
      *         description: Connexion réussie
