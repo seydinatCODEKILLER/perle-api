@@ -21,7 +21,7 @@ model User {
   password      String?
   prenom        String
   nom           String
-  phone         String?
+  phone         String      @unique
   avatar        String?
   role          UserRole    @default(MEMBER)
   isActive      Boolean     @default(true)
