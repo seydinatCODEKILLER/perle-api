@@ -22,6 +22,12 @@ export default class AuthService {
       throw new Error("Un utilisateur avec cet email existe déjà");
     }
 
+    const existUserWithPhone = await prisma.user.findUnique({
+      where: {phone},
+    });
+
+    if(existUserWithPhone) throw new Error("Un utilisateur avec ce numero existe deja");
+
     let avatarUrl = null;
 
     try {
@@ -156,8 +162,8 @@ export default class AuthService {
       where: { id: userId },
       select: {
         id: true,
-        firstName: true,
-        lastName: true,
+        prenom: true,
+        nom: true,
         email: true,
         phone: true,
         role: true,
@@ -192,7 +198,7 @@ export default class AuthService {
   }
 
   async updateProfile(userId, updateData) {
-    const { firstName, lastName, phone, avatarFile } = updateData;
+    const { prenom, nom, phone, avatarFile } = updateData;
 
     let newAvatarInfo;
 
@@ -220,15 +226,15 @@ export default class AuthService {
       const updatedUser = await prisma.user.update({
         where: { id: userId },
         data: {
-          ...(firstName && { firstName }),
-          ...(lastName && { lastName }),
+          ...(prenom && { prenom }),
+          ...(nom && { nom }),
           ...(phone && { phone }),
           ...(newAvatarInfo && { avatar: newAvatarInfo.url }),
         },
         select: {
           id: true,
-          firstName: true,
-          lastName: true,
+          prenom: true,
+          nom: true,
           email: true,
           phone: true,
           role: true,
@@ -270,8 +276,8 @@ export default class AuthService {
       data: { canCreateOrganization },
       select: {
         id: true,
-        firstName: true,
-        lastName: true,
+        prenom: true,
+        nom: true,
         email: true,
         role: true,
         avatar: true,

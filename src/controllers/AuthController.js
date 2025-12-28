@@ -72,12 +72,12 @@ export default class AuthController {
   async updateProfile(req, res) {
     try {
       const userId = req.user.id;
-      const { firstName, lastName, phone } = req.body;
+      const { prenom, nom, phone } = req.body;
       const avatarFile = req.file;
 
       const user = await this.service.updateProfile(userId, {
-        firstName,
-        lastName,
+        prenom,
+        nom,
         phone,
         avatarFile,
       });
