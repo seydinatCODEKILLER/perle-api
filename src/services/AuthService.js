@@ -1,16 +1,13 @@
-import { v4 as uuidv4 } from "uuid";
 import PasswordHasher from "../utils/hash.js";
 import TokenGenerator from "../config/jwt.js";
 import MediaUploader from "../utils/uploadMedia.js";
 import { prisma } from "../config/database.js";
-import EmailService from "../utils/EmailService.js";
 
 export default class AuthService {
   constructor() {
     this.passwordHasher = new PasswordHasher();
     this.tokenGenerator = new TokenGenerator();
     this.mediaUploader = new MediaUploader();
-    this.emailService = new EmailService();
   }
 
   async register(userData) {
@@ -154,210 +151,6 @@ export default class AuthService {
     };
   }
 
-  async sendLoginCode(email) {
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    // Pour des raisons de sécurité, on ne révèle pas si l'email existe
-    if (!user) {
-      return {
-        message: "Si l'email existe, un code de connexion a été envoyé",
-      };
-    }
-
-    if (!user.isActive) {
-      throw new Error("Compte utilisateur inactif");
-    }
-
-    // Génération d'un code à 6 chiffres
-    const loginCode = Math.floor(100000 + Math.random() * 900000).toString();
-    const loginCodeExpiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
-
-    // Mise à jour de l'utilisateur avec le code
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        loginCode,
-        loginCodeExpiresAt,
-      },
-    });
-
-    // Envoi du code par email
-    await this.emailService.sendLoginCodeEmail(
-      email,
-      loginCode,
-      user.firstName
-    );
-
-    return {
-      message: "Si l'email existe, un code de connexion a été envoyé",
-    };
-  }
-
-  async verifyLoginCode(email, loginCode) {
-    const user = await prisma.user.findUnique({
-      where: {
-        email,
-        loginCode,
-        loginCodeExpiresAt: {
-          gt: new Date(),
-        },
-      },
-    });
-
-    if (!user) {
-      throw new Error("Code invalide ou expiré");
-    }
-
-    if (!user.isActive) {
-      throw new Error("Compte utilisateur inactif");
-    }
-
-    // Réinitialiser le code après utilisation
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        loginCode: null,
-        loginCodeExpiresAt: null,
-        lastLoginAt: new Date(),
-      },
-    });
-
-    const token = this.tokenGenerator.sign({
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      canCreateOrganization: user.canCreateOrganization,
-    });
-
-    const userData = {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      phone: user.phone,
-      role: user.role,
-      avatar: user.avatar,
-      isActive: user.isActive,
-      canCreateOrganization: user.canCreateOrganization,
-      createdAt: user.createdAt,
-      lastLoginAt: user.lastLoginAt,
-    };
-
-    return {
-      user: userData,
-      token,
-    };
-  }
-
-  async forgotPassword(email) {
-    // Recherche de l'utilisateur
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    // Pour des raisons de sécurité, on ne révèle pas si l'email existe
-    if (!user) {
-      return {
-        message: "Si l'email existe, un lien de réinitialisation a été envoyé",
-      };
-    }
-
-    if (!user.isActive) {
-      throw new Error("Compte utilisateur inactif");
-    }
-
-    // Génération d'un token unique
-    const resetToken = uuidv4();
-    const expiresAt = new Date(Date.now() + 1 * 60 * 60 * 1000); // 1 heure
-
-    // Création ou mise à jour du token de réinitialisation
-    await prisma.passwordResetToken.upsert({
-      where: { email },
-      update: {
-        token: resetToken,
-        expiresAt,
-        status: "PENDING",
-        updatedAt: new Date(),
-      },
-      create: {
-        email,
-        token: resetToken,
-        expiresAt,
-        userId: user.id,
-      },
-    });
-
-    // Envoi de l'email
-    await this.emailService.sendPasswordResetEmail(email, resetToken);
-
-    return {
-      message: "Si l'email existe, un lien de réinitialisation a été envoyé",
-    };
-  }
-
-  async resetPassword(token, newPassword) {
-    // Recherche du token valide
-    const resetToken = await prisma.passwordResetToken.findFirst({
-      where: {
-        token,
-        status: "PENDING",
-        expiresAt: {
-          gt: new Date(),
-        },
-      },
-      include: {
-        user: true,
-      },
-    });
-
-    if (!resetToken) {
-      throw new Error("Token invalide ou expiré");
-    }
-
-    // Hash du nouveau mot de passe
-    const hashedPassword = await this.passwordHasher.hash(newPassword);
-
-    // Transaction pour garantir la cohérence des données
-    const result = await prisma.$transaction(async (tx) => {
-      // Mise à jour du mot de passe utilisateur
-      const user = await tx.user.update({
-        where: { id: resetToken.userId },
-        data: { password: hashedPassword },
-        select: {
-          id: true,
-          email: true,
-          firstName: true,
-          lastName: true,
-        },
-      });
-
-      // Marquer le token comme utilisé
-      await tx.passwordResetToken.update({
-        where: { id: resetToken.id },
-        data: { status: "USED" },
-      });
-
-      return user;
-    });
-
-    // Envoi de l'email de confirmation
-    this.emailService
-      .sendPasswordChangedEmail(
-        result.email,
-        `${result.firstName} ${result.lastName}`
-      )
-      .catch((error) =>
-        console.error("❌ Erreur email de confirmation:", error)
-      );
-
-    return {
-      message: "Mot de passe réinitialisé avec succès",
-      user: result,
-    };
-  }
-
   async getCurrentUser(userId) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -497,8 +290,6 @@ export default class AuthService {
   }
 
   async logout() {
-    // Pour JWT stateless, on ne fait rien côté serveur
-    // Le token sera invalidé côté client
     return { message: "Déconnexion réussie" };
   }
 }

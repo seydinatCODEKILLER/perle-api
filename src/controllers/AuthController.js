@@ -59,36 +59,6 @@ export default class AuthController {
     }
   }
 
-  async forgotPassword(req, res) {
-    try {
-      // Validation des données
-      this.schema.validateForgotPassword(req.body);
-
-      const { email } = req.body;
-
-      const result = await this.service.forgotPassword(email);
-
-      return res.success(null, result.message);
-    } catch (error) {
-      return res.error(error.message, 400);
-    }
-  }
-
-  async resetPassword(req, res) {
-    try {
-      // Validation des données
-      this.schema.validateResetPassword(req.body);
-
-      const { token, newPassword } = req.body;
-
-      const result = await this.service.resetPassword(token, newPassword);
-
-      return res.success({ user: result.user }, result.message);
-    } catch (error) {
-      return res.error(error.message, 400);
-    }
-  }
-
   async getCurrentUser(req, res) {
     try {
       const userId = req.user.id;
@@ -113,38 +83,6 @@ export default class AuthController {
       });
 
       return res.success(user, "Profil mis à jour avec succès");
-    } catch (error) {
-      return res.error(error.message, 400);
-    }
-  }
-
-  async sendLoginCode(req, res) {
-    try {
-      const { email } = req.body;
-
-      if (!email) {
-        return res.error("L'email est requis", 400);
-      }
-
-      const result = await this.service.sendLoginCode(email);
-
-      return res.success(null, result.message);
-    } catch (error) {
-      return res.error(error.message, 400);
-    }
-  }
-
-  async verifyLoginCode(req, res) {
-    try {
-      const { email, loginCode } = req.body;
-
-      if (!email || !loginCode) {
-        return res.error("L'email et le code sont requis", 400);
-      }
-
-      const result = await this.service.verifyLoginCode(email, loginCode);
-
-      return res.success(result, "Connexion réussie avec code");
     } catch (error) {
       return res.error(error.message, 400);
     }
