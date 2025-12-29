@@ -1,4 +1,3 @@
-// controllers/OrganizationController.js
 import OrganizationService from "../services/OrganizationService.js";
 import OrganizationSchema from "../schemas/OrganizationSchema.js";
 
