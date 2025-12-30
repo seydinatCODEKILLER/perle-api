@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import responseHandler from "./middlewares/responseMiddleware.js";
 import logger from "./utils/logger.js";
-import { AuthRoute, organisationRoute } from "./utils/Router.js";
+import { AuthRoute, membershipRoute, organisationRoute } from "./utils/Router.js";
 import swaggerJSDoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
 import { swaggerOptions } from "./config/swagger.js";
@@ -24,6 +24,7 @@ app.use((req, res, next) => {
 
 app.use("/api/auth", AuthRoute.routes);
 app.use("/api/organizations", organisationRoute.routes);
+app.use("/api/membership", membershipRoute.routes);
 
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(specs));
 

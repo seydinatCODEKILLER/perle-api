@@ -54,6 +54,7 @@ model Organization {
   type          OrganizationType
   logo          String?
   currency      String      @default("XOF")
+  memberCounter     Int     @default(0)
 
   ownerId       String      @db.ObjectId
   owner         User        @relation("OwnedOrganizations", fields: [ownerId], references: [id])
