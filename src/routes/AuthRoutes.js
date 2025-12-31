@@ -290,11 +290,11 @@ export default class AuthRoutes {
      *               phone:
      *                 type: string
      *                 description: Numéro de téléphone (format international)
-     *                 example: "+221771234567"
+     *                 example: "781254695"
      *               password:
      *                 type: string
      *                 format: password
-     *                 example: "motdepasse123"
+     *                 example: "Liverpool040"
      *     responses:
      *       200:
      *         description: Connexion réussie
