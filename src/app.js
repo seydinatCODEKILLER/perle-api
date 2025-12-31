@@ -9,6 +9,7 @@ import {
   debtRoute,
   membershipRoute,
   organisationRoute,
+  subscriptionRoute,
   transactionRoute,
 } from "./utils/Router.js";
 import swaggerJSDoc from "swagger-jsdoc";
@@ -37,6 +38,7 @@ app.use("/api/contribution-plans", contributionPlanRoute.routes);
 app.use("/api/contributions", contributionRoute.routes);
 app.use("/api/debts", debtRoute.routes);
 app.use("/api/transactions", transactionRoute.routes);
+app.use("/api/subscriptions", subscriptionRoute.routes);
 
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(specs));
 
