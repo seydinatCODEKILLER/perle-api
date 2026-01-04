@@ -1,4 +1,3 @@
-// controllers/AuthController.js
 import AuthService from "../services/AuthService.js";
 import AuthSchema from "../schemas/AuthSchema.js";
 
@@ -10,7 +9,6 @@ export default class AuthController {
 
   async register(req, res) {
     try {
-      // Validation des données
       this.schema.validateRegister(req.body);
 
       const { prenom, nom, email, password, phone } = req.body;
