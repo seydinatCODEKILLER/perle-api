@@ -1,4 +1,3 @@
-// schemas/AuthSchema.js
 import { z } from "zod";
 
 export default class AuthSchema {
@@ -26,11 +25,6 @@ export default class AuthSchema {
         .string()
         .min(9, { message: "Le numéro de téléphone est invalide" })
         .optional(),
-      avatar: z
-        .string()
-        .url("URL d'image invalide")
-        .optional()
-        .or(z.literal("").transform(() => undefined)),
     });
 
     this.#validateSchema(schema, data);
