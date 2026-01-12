@@ -158,6 +158,9 @@ export default class OrganizationService {
       where: {
         userId,
         status: "ACTIVE",
+        organization: {
+          isActive: true,
+        },
       },
       include: {
         organization: {
