@@ -276,6 +276,54 @@ export default class OrganizationRoutes {
     this.router.patch("/:id/deactivate", (req, res) =>
       this.controller.deactivateOrganization(req, res)
     );
+
+    /**
+     * @swagger
+     * /api/organizations/{id}/reactivate:
+     *   patch:
+     *     summary: Réactiver une organisation désactivée
+     *     tags: [Organizations]
+     *     security:
+     *       - bearerAuth: []
+     *     parameters:
+     *       - in: path
+     *         name: id
+     *         required: true
+     *         schema:
+     *           type: string
+     *         description: ID de l'organisation à réactiver
+     *     responses:
+     *       200:
+     *         description: Organisation réactivée avec succès
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 success:
+     *                   type: boolean
+     *                   example: true
+     *                 message:
+     *                   type: string
+     *                   example: "Organisation réactivée avec succès"
+     *                 data:
+     *                   $ref: '#/components/schemas/Organization'
+     *       400:
+     *         description: Erreur (organisation non trouvée ou permissions insuffisantes)
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 success:
+     *                   type: boolean
+     *                   example: false
+     *                 message:
+     *                   type: string
+     */
+    this.router.patch("/:id/reactivate", (req, res) =>
+      this.controller.reactivateOrganization(req, res)
+    );
   }
 
   get routes() {

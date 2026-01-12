@@ -114,6 +114,26 @@ export default class OrganizationController {
     }
   }
 
+  async reactivateOrganization(req, res) {
+    try {
+      const { id } = req.params; // organizationId depuis l'URL
+      const userId = req.user.id; // utilisateur connecté
+
+      const organization = await this.service.reactivateOrganization(
+        id,
+        userId
+      );
+
+      return res.success(
+        organization,
+        "Organisation réactivée avec succès",
+        200
+      );
+    } catch (error) {
+      return res.error(error.message, 400);
+    }
+  }
+
   async getOrganizationStats(req, res) {
     try {
       const { id } = req.params;

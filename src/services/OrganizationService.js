@@ -342,6 +342,44 @@ export default class OrganizationService {
     return deactivatedOrg;
   }
 
+  /**
+   * Réactiver une organisation (isActive = true)
+   */
+  async reactivateOrganization(organizationId, userId) {
+    // Seul le propriétaire peut réactiver
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      include: { owner: true },
+    });
+
+    if (!organization) throw new Error("Organisation non trouvée");
+
+    if (organization.ownerId !== userId) {
+      throw new Error("Seul le propriétaire peut réactiver l'organisation");
+    }
+
+    if (organization.isActive) {
+      throw new Error("L'organisation est déjà active");
+    }
+
+    const reactivatedOrg = await prisma.organization.update({
+      where: { id: organizationId },
+      data: { isActive: true },
+      include: {
+        owner: {
+          select: {
+            id: true,
+            prenom: true,
+            nom: true,
+            email: true,
+          },
+        },
+      },
+    });
+
+    return reactivatedOrg;
+  }
+
   async getOrganizationStats(organizationId, userId) {
     // Vérifier l'accès
     const membership = await prisma.membership.findFirst({
