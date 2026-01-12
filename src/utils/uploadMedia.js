@@ -5,30 +5,38 @@ export default class MediaUploader {
     this.uploadResults = new Map();
   }
 
-  async upload(file, folder = "hackathon/media", prefix = "file") {
-    if (!file || typeof file !== "object") return null;
+async upload(file, folder = "hackathon/media", prefix = "file") {
+  if (!file || !file.buffer) return null;
 
-    try {
-      const base64 = file.buffer.toString("base64");
-      const dataUri = `data:${file.mimetype};base64,${base64}`;
+  try {
+    const result = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder,
+          public_id: `${prefix}_${Date.now()}`,
+          resource_type: "auto",
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
 
-      const result = await cloudinary.uploader.upload(dataUri, {
-        folder,
-        public_id: `${prefix}_${Date.now()}`,
-        resource_type: "auto",
-      });
+      stream.end(file.buffer);
+    });
 
-      this.uploadResults.set(prefix, {
-        public_id: result.public_id,
-        url: result.secure_url,
-      });
+    this.uploadResults.set(prefix, {
+      public_id: result.public_id,
+      url: result.secure_url,
+    });
 
-      return result.secure_url;
-    } catch (error) {
-      console.error("Upload failed:", error);
-      throw error;
-    }
+    return result.secure_url;
+  } catch (error) {
+    console.error("Upload failed:", error);
+    throw error;
   }
+}
+
 
   async rollback(prefix) {
     const uploadInfo = this.uploadResults.get(prefix);
