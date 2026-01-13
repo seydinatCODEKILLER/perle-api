@@ -2,6 +2,7 @@ import PasswordHasher from "../utils/hash.js";
 import TokenGenerator from "../config/jwt.js";
 import MediaUploader from "../utils/uploadMedia.js";
 import { prisma } from "../config/database.js";
+import crypto from "crypto";
 
 export default class AuthService {
   constructor() {
@@ -23,10 +24,12 @@ export default class AuthService {
     }
 
     const existUserWithPhone = await prisma.user.findUnique({
-      where: {phone},
+      where: { phone },
     });
 
-    if(existUserWithPhone) throw new Error("Un utilisateur avec ce numero existe deja");
+    if (existUserWithPhone) {
+      throw new Error("Un utilisateur avec ce numero existe deja");
+    }
 
     let avatarUrl = null;
 
@@ -68,13 +71,8 @@ export default class AuthService {
         },
       });
 
-      // Génération du token JWT
-      const token = this.tokenGenerator.sign({
-        id: user.id,
-        email: user.email,
-        role: user.role,
-        canCreateOrganization: user.canCreateOrganization,
-      });
+      // Génération des tokens
+      const { accessToken, refreshToken } = await this.generateTokens(user);
 
       // Mise à jour de la dernière connexion
       await prisma.user.update({
@@ -84,7 +82,8 @@ export default class AuthService {
 
       return {
         user,
-        token,
+        accessToken,
+        refreshToken,
       };
     } catch (error) {
       // Rollback de l'upload si erreur
@@ -118,8 +117,9 @@ export default class AuthService {
       user.password
     );
 
-    if (!isPasswordValid)
+    if (!isPasswordValid) {
       throw new Error("Numéro de téléphone ou mot de passe incorrect");
+    }
 
     // Mise à jour de la dernière connexion
     await prisma.user.update({
@@ -127,14 +127,8 @@ export default class AuthService {
       data: { lastLoginAt: new Date() },
     });
 
-    // Génération du token
-    const token = this.tokenGenerator.sign({
-      id: user.id,
-      phone: user.phone,
-      email: user.email,
-      role: user.role,
-      canCreateOrganization: user.canCreateOrganization,
-    });
+    // Génération des tokens
+    const { accessToken, refreshToken } = await this.generateTokens(user);
 
     // Données utilisateur sans le mot de passe
     const userData = {
@@ -153,7 +147,8 @@ export default class AuthService {
 
     return {
       user: userData,
-      token,
+      accessToken,
+      refreshToken,
     };
   }
 
@@ -184,7 +179,6 @@ export default class AuthService {
                 currency: true,
               },
             },
-            profile: true,
           },
         },
       },
@@ -295,7 +289,132 @@ export default class AuthService {
     };
   }
 
-  async logout() {
+  /**
+   * Déconnexion - révoque le refresh token fourni
+   */
+  async logout(refreshToken) {
+    if (refreshToken) {
+      await this.revokeRefreshToken(refreshToken);
+    }
     return { message: "Déconnexion réussie" };
+  }
+
+  /**
+   * Génère et stocke un refresh token
+   */
+  async generateRefreshToken(userId) {
+    const refreshToken = crypto.randomBytes(64).toString("hex");
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    await prisma.refreshToken.create({
+      data: {
+        token: refreshToken,
+        userId,
+        expiresAt,
+      },
+    });
+
+    return refreshToken;
+  }
+
+  /**
+   * Génère les tokens (access + refresh)
+   */
+  async generateTokens(user) {
+    const accessToken = this.tokenGenerator.sign({
+      id: user.id,
+      email: user.email,
+      phone: user.phone,
+      role: user.role,
+      canCreateOrganization: user.canCreateOrganization,
+    });
+
+    const refreshToken = await this.generateRefreshToken(user.id);
+
+    return { accessToken, refreshToken };
+  }
+
+  /**
+   * Rafraîchit l'access token avec un refresh token
+   */
+  async refreshAccessToken(refreshToken) {
+    // Vérifier si le refresh token existe et est valide
+    const tokenRecord = await prisma.refreshToken.findUnique({
+      where: { token: refreshToken },
+      include: { user: true },
+    });
+
+    if (!tokenRecord) {
+      throw new Error("Refresh token invalide");
+    }
+
+    if (tokenRecord.isRevoked) {
+      throw new Error("Refresh token révoqué");
+    }
+
+    if (new Date() > tokenRecord.expiresAt) {
+      throw new Error("Refresh token expiré");
+    }
+
+    if (!tokenRecord.user.isActive) {
+      throw new Error("Compte utilisateur inactif");
+    }
+
+    // Générer un nouvel access token
+    const accessToken = this.tokenGenerator.sign({
+      id: tokenRecord.user.id,
+      email: tokenRecord.user.email,
+      phone: tokenRecord.user.phone,
+      role: tokenRecord.user.role,
+      canCreateOrganization: tokenRecord.user.canCreateOrganization,
+    });
+
+    return { accessToken };
+  }
+
+  /**
+   * Révoque un refresh token
+   */
+  async revokeRefreshToken(refreshToken) {
+    const tokenRecord = await prisma.refreshToken.findUnique({
+      where: { token: refreshToken },
+    });
+
+    if (!tokenRecord) {
+      throw new Error("Refresh token introuvable");
+    }
+
+    await prisma.refreshToken.update({
+      where: { token: refreshToken },
+      data: { isRevoked: true },
+    });
+
+    return { message: "Refresh token révoqué avec succès" };
+  }
+
+  /**
+   * Révoque tous les refresh tokens d'un utilisateur
+   */
+  async revokeAllUserTokens(userId) {
+    await prisma.refreshToken.updateMany({
+      where: { userId, isRevoked: false },
+      data: { isRevoked: true },
+    });
+
+    return { message: "Tous les refresh tokens ont été révoqués" };
+  }
+
+  /**
+   * Nettoie les refresh tokens expirés
+   */
+  async cleanupExpiredTokens() {
+    const result = await prisma.refreshToken.deleteMany({
+      where: {
+        OR: [{ expiresAt: { lt: new Date() } }, { isRevoked: true }],
+      },
+    });
+
+    return { deletedCount: result.count };
   }
 }

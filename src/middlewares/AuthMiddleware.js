@@ -1,4 +1,3 @@
-// middlewares/AuthMiddleware.js
 import TokenGenerator from "../config/jwt.js";
 import { prisma } from "../config/database.js";
 
@@ -70,7 +69,6 @@ export default class AuthMiddleware {
     };
   }
 
-  // Middleware pour vérifier l'accès à une organisation spécifique
   checkOrganizationAccess() {
     return async (req, res, next) => {
       try {

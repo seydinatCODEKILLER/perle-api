@@ -63,9 +63,28 @@ export default class AuthRoutes {
      *       properties:
      *         user:
      *           $ref: '#/components/schemas/User'
-     *         token:
+     *         accessToken:
      *           type: string
      *           example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+     *         refreshToken:
+     *           type: string
+     *           example: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0..."
+     *
+     *     RefreshTokenResponse:
+     *       type: object
+     *       properties:
+     *         accessToken:
+     *           type: string
+     *           example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+     *
+     *     RefreshTokenRequest:
+     *       type: object
+     *       required:
+     *         - refreshToken
+     *       properties:
+     *         refreshToken:
+     *           type: string
+     *           example: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0..."
      *
      *     RegisterRequest:
      *       type: object
@@ -99,67 +118,16 @@ export default class AuthRoutes {
      *     LoginRequest:
      *       type: object
      *       required:
-     *         - email
+     *         - phone
      *         - password
      *       properties:
-     *         email:
+     *         phone:
      *           type: string
-     *           format: email
-     *           example: "jean.dupont@email.com"
+     *           example: "781254695"
      *         password:
      *           type: string
      *           format: password
-     *           example: "MonMotDePasse123!"
-     *
-     *     LoginCodeRequest:
-     *       type: object
-     *       required:
-     *         - email
-     *       properties:
-     *         email:
-     *           type: string
-     *           format: email
-     *           example: "jean.dupont@email.com"
-     *
-     *     VerifyLoginCodeRequest:
-     *       type: object
-     *       required:
-     *         - email
-     *         - loginCode
-     *       properties:
-     *         email:
-     *           type: string
-     *           format: email
-     *           example: "jean.dupont@email.com"
-     *         loginCode:
-     *           type: string
-     *           length: 6
-     *           example: "123456"
-     *
-     *     ForgotPasswordRequest:
-     *       type: object
-     *       required:
-     *         - email
-     *       properties:
-     *         email:
-     *           type: string
-     *           format: email
-     *           example: "jean.dupont@email.com"
-     *
-     *     ResetPasswordRequest:
-     *       type: object
-     *       required:
-     *         - token
-     *         - newPassword
-     *       properties:
-     *         token:
-     *           type: string
-     *           example: "12345678-1234-1234-1234-123456789abc"
-     *         newPassword:
-     *           type: string
-     *           format: password
-     *           minLength: 8
-     *           example: "NouveauMotDePasse123!"
+     *           example: "Liverpool040"
      *
      *     UpdateProfileRequest:
      *       type: object
@@ -282,19 +250,7 @@ export default class AuthRoutes {
      *       content:
      *         application/json:
      *           schema:
-     *             type: object
-     *             required:
-     *               - phone
-     *               - password
-     *             properties:
-     *               phone:
-     *                 type: string
-     *                 description: Numéro de téléphone (format international)
-     *                 example: "781254695"
-     *               password:
-     *                 type: string
-     *                 format: password
-     *                 example: "Liverpool040"
+     *             $ref: '#/components/schemas/LoginRequest'
      *     responses:
      *       200:
      *         description: Connexion réussie
@@ -327,6 +283,48 @@ export default class AuthRoutes {
      *               $ref: '#/components/schemas/Error'
      */
     this.router.post("/login", (req, res) => this.controller.login(req, res));
+
+    /**
+     * @swagger
+     * /api/auth/refresh-token:
+     *   post:
+     *     summary: Rafraîchir l'access token
+     *     tags: [Authentication]
+     *     description: Permet d'obtenir un nouveau access token en utilisant un refresh token valide
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             $ref: '#/components/schemas/RefreshTokenRequest'
+     *     responses:
+     *       200:
+     *         description: Token rafraîchi avec succès
+     *         content:
+     *           application/json:
+     *             schema:
+     *               allOf:
+     *                 - $ref: '#/components/schemas/Success'
+     *                 - type: object
+     *                   properties:
+     *                     data:
+     *                       $ref: '#/components/schemas/RefreshTokenResponse'
+     *       400:
+     *         description: Refresh token manquant
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/Error'
+     *       401:
+     *         description: Refresh token invalide, révoqué ou expiré
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/Error'
+     */
+    this.router.post("/refresh-token", (req, res) =>
+      this.controller.refreshToken(req, res)
+    );
 
     // Routes protégées
 
@@ -422,6 +420,124 @@ export default class AuthRoutes {
 
     /**
      * @swagger
+     * /api/auth/logout:
+     *   post:
+     *     summary: Déconnexion de l'utilisateur
+     *     tags: [Authentication]
+     *     security:
+     *       - bearerAuth: []
+     *     requestBody:
+     *       required: false
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               refreshToken:
+     *                 type: string
+     *                 description: Refresh token à révoquer (optionnel)
+     *                 example: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0..."
+     *     responses:
+     *       200:
+     *         description: Déconnexion réussie
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/Success'
+     *       401:
+     *         description: Non authentifié
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/Error'
+     *       500:
+     *         description: Erreur serveur lors de la déconnexion
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/Error'
+     */
+    this.router.post("/logout", this.authMiddleware.protect(), (req, res) =>
+      this.controller.logout(req, res)
+    );
+
+    /**
+     * @swagger
+     * /api/auth/revoke-token:
+     *   post:
+     *     summary: Révoquer un refresh token spécifique
+     *     tags: [Authentication]
+     *     security:
+     *       - bearerAuth: []
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             $ref: '#/components/schemas/RefreshTokenRequest'
+     *     responses:
+     *       200:
+     *         description: Refresh token révoqué avec succès
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/Success'
+     *       400:
+     *         description: Refresh token manquant ou invalide
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/Error'
+     *       401:
+     *         description: Non authentifié
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/Error'
+     */
+    this.router.post(
+      "/revoke-token",
+      this.authMiddleware.protect(),
+      (req, res) => this.controller.revokeRefreshToken(req, res)
+    );
+
+    /**
+     * @swagger
+     * /api/auth/revoke-all-tokens:
+     *   post:
+     *     summary: Révoquer tous les refresh tokens de l'utilisateur
+     *     tags: [Authentication]
+     *     security:
+     *       - bearerAuth: []
+     *     description: Déconnecte l'utilisateur de tous ses appareils en révoquant tous ses refresh tokens
+     *     responses:
+     *       200:
+     *         description: Tous les refresh tokens ont été révoqués
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/Success'
+     *       400:
+     *         description: Erreur lors de la révocation
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/Error'
+     *       401:
+     *         description: Non authentifié
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/Error'
+     */
+    this.router.post(
+      "/revoke-all-tokens",
+      this.authMiddleware.protect(),
+      (req, res) => this.controller.revokeAllTokens(req, res)
+    );
+
+    /**
+     * @swagger
      * /api/auth/can-create-org:
      *   patch:
      *     summary: Mettre à jour le droit de création d'organisation (Admin seulement)
@@ -465,38 +581,6 @@ export default class AuthRoutes {
       this.authMiddleware.protect(),
       this.authMiddleware.restrictTo("SUPER_ADMIN", "ADMIN"),
       (req, res) => this.controller.updateCanCreateOrganization(req, res)
-    );
-
-    /**
-     * @swagger
-     * /api/auth/logout:
-     *   post:
-     *     summary: Déconnexion de l'utilisateur
-     *     tags: [Authentication]
-     *     security:
-     *       - bearerAuth: []
-     *     responses:
-     *       200:
-     *         description: Déconnexion réussie
-     *         content:
-     *           application/json:
-     *             schema:
-     *               $ref: '#/components/schemas/Success'
-     *       401:
-     *         description: Non authentifié
-     *         content:
-     *           application/json:
-     *             schema:
-     *               $ref: '#/components/schemas/Error'
-     *       500:
-     *         description: Erreur serveur lors de la déconnexion
-     *         content:
-     *           application/json:
-     *             schema:
-     *               $ref: '#/components/schemas/Error'
-     */
-    this.router.post("/logout", this.authMiddleware.protect(), (req, res) =>
-      this.controller.logout(req, res)
     );
   }
 

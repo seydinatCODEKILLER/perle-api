@@ -13,8 +13,8 @@ export default class TokenGenerator {
   }
 
   signRefresh(payload) {
-    return jwt.sign(payload, env.JWT_SECRET, {
+    return jwt.sign(payload, env.JWT_REFRESH_SECRET, {
       expiresIn: env.JWT_REFRESH_DURATION,
-    })
+    });
   }
 }

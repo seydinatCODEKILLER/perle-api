@@ -11,4 +11,6 @@ export const env = {
   JWT_DURATION: process.env.JWT_DURATION,
   HOST: process.env.NODE_ENV === "production" ? process.env.HOST : "localhost",
   FRONTEND_URL: process.env.FRONTEND_URL,
+  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET,
+  JWT_REFRESH_DURATION: process.env.JWT_REFRESH_DURATION,
 };

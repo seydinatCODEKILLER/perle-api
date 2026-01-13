@@ -50,7 +50,8 @@ export default class AuthController {
 
   async logout(req, res) {
     try {
-      const result = await this.service.logout();
+      const { refreshToken } = req.body;
+      const result = await this.service.logout(refreshToken);
       return res.success(result, "Déconnexion réussie");
     } catch (error) {
       return res.error("Erreur lors de la déconnexion", 500);
@@ -98,6 +99,55 @@ export default class AuthController {
         userId,
         canCreateOrganization
       );
+
+      return res.success(result, result.message);
+    } catch (error) {
+      return res.error(error.message, 400);
+    }
+  }
+
+  async refreshToken(req, res) {
+    try {
+      const { refreshToken } = req.body;
+
+      if (!refreshToken) {
+        return res.error("Refresh token requis", 400);
+      }
+
+      const result = await this.service.refreshAccessToken(refreshToken);
+
+      return res.success(result, "Token rafraîchi avec succès");
+    } catch (error) {
+      const statusCode =
+        error.message.includes("invalide") ||
+        error.message.includes("révoqué") ||
+        error.message.includes("expiré")
+          ? 401
+          : 400;
+      return res.error(error.message, statusCode);
+    }
+  }
+
+  async revokeAllTokens(req, res) {
+    try {
+      const userId = req.user.id;
+      const result = await this.service.revokeAllUserTokens(userId);
+
+      return res.success(result, result.message);
+    } catch (error) {
+      return res.error(error.message, 400);
+    }
+  }
+
+  async revokeRefreshToken(req, res) {
+    try {
+      const { refreshToken } = req.body;
+
+      if (!refreshToken) {
+        return res.error("Refresh token requis", 400);
+      }
+
+      const result = await this.service.revokeRefreshToken(refreshToken);
 
       return res.success(result, result.message);
     } catch (error) {
