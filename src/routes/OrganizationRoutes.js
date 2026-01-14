@@ -83,6 +83,96 @@ export default class OrganizationRoutes {
 
     /**
      * @swagger
+     * /api/organizations/inactive:
+     *   get:
+     *     summary: Récupérer les organisations inactives de l'utilisateur
+     *     tags: [Organizations]
+     *     security:
+     *       - bearerAuth: []
+     *     description: Retourne la liste des organisations désactivées dont l'utilisateur est membre
+     *     parameters:
+     *       - in: query
+     *         name: page
+     *         schema:
+     *           type: integer
+     *           default: 1
+     *           minimum: 1
+     *         description: Numéro de la page
+     *       - in: query
+     *         name: limit
+     *         schema:
+     *           type: integer
+     *           default: 10
+     *           minimum: 1
+     *           maximum: 100
+     *         description: Nombre d'organisations par page
+     *     responses:
+     *       200:
+     *         description: Liste des organisations inactives récupérée avec succès
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 success:
+     *                   type: boolean
+     *                   example: true
+     *                 message:
+     *                   type: string
+     *                   example: "Organisations inactives récupérées avec succès"
+     *                 data:
+     *                   type: object
+     *                   properties:
+     *                     organizations:
+     *                       type: array
+     *                       items:
+     *                         $ref: '#/components/schemas/Organization'
+     *                     pagination:
+     *                       type: object
+     *                       properties:
+     *                         page:
+     *                           type: integer
+     *                           example: 1
+     *                         limit:
+     *                           type: integer
+     *                           example: 10
+     *                         total:
+     *                           type: integer
+     *                           example: 25
+     *                         pages:
+     *                           type: integer
+     *                           example: 3
+     *                         hasNext:
+     *                           type: boolean
+     *                           example: true
+     *                         hasPrev:
+     *                           type: boolean
+     *                           example: false
+     *       400:
+     *         description: Erreur de requête
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 success:
+     *                   type: boolean
+     *                   example: false
+     *                 message:
+     *                   type: string
+     *       401:
+     *         description: Non authentifié
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/Error'
+     */
+    this.router.get("/inactive", (req, res) =>
+      this.controller.getInactiveOrganizations(req, res)
+    );
+
+    /**
+     * @swagger
      * /api/organizations/search:
      *   get:
      *     summary: Rechercher des organisations

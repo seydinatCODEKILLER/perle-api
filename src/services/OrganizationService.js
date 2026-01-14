@@ -521,6 +521,81 @@ export default class OrganizationService {
     };
   }
 
+  async getInactiveOrganizations(userId, page = 1, limit = 10) {
+    const skip = (page - 1) * limit;
+
+    const whereClause = {
+      isActive: false,
+      members: {
+        some: {
+          userId,
+          status: "ACTIVE", // ✅ Sécurité : accès valide
+        },
+      },
+    };
+
+    const [organizations, total] = await Promise.all([
+      prisma.organization.findMany({
+        where: whereClause,
+        include: {
+          owner: {
+            select: {
+              id: true,
+              prenom: true,
+              nom: true,
+              email: true,
+            },
+          },
+          subscription: true,
+
+          // Récupération DU membership de l'utilisateur
+          members: {
+            where: {
+              userId,
+              status: "ACTIVE",
+            },
+            select: {
+              role: true,
+              status: true,
+              joinDate: true,
+            },
+            take: 1,
+          },
+
+          _count: {
+            select: {
+              members: {
+                where: { status: "ACTIVE" },
+              },
+            },
+          },
+        },
+        skip,
+        take: limit,
+        orderBy: { updatedAt: "desc" },
+      }),
+
+      prisma.organization.count({ where: whereClause }),
+    ]);
+
+    return {
+      organizations: organizations.map((org) => ({
+        ...org,
+        userRole: org.members[0].role,
+        userMembershipStatus: org.members[0].status,
+        members: undefined,
+      })),
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+        hasNext: page < Math.ceil(total / limit),
+        hasPrev: page > 1,
+      },
+    };
+  }
+
   // Méthodes utilitaires privées
   #generateLoginId() {
     return Math.random().toString(36).substring(2, 10).toUpperCase();

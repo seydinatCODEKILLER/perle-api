@@ -166,4 +166,24 @@ export default class OrganizationController {
       return res.error(error.message, 400);
     }
   }
+
+  async getInactiveOrganizations(req, res) {
+    try {
+      const userId = req.user.id;
+      const { page, limit } = req.query;
+
+      const result = await this.service.getInactiveOrganizations(
+        userId,
+        parseInt(page) || 1,
+        parseInt(limit) || 10
+      );
+
+      return res.success(
+        result,
+        "Organisations inactives récupérées avec succès"
+      );
+    } catch (error) {
+      return res.error(error.message, 400);
+    }
+  }
 }
