@@ -103,54 +103,76 @@ export default class OrganizationService {
   }
 
   async getOrganizationById(organizationId, userId) {
-    // Vérifier que l'utilisateur a accès à cette organisation
-    const membership = await prisma.membership.findFirst({
-      where: {
-        userId,
-        organizationId,
-        status: "ACTIVE",
-      },
-    });
-
-    if (!membership) {
-      throw new Error("Accès non autorisé à cette organisation");
-    }
-
-    const organization = await prisma.organization.findUnique({
-      where: {
-        id: organizationId,
-        isActive: true,
-      },
-      include: {
-        owner: {
-          select: {
-            id: true,
-            prenom: true,
-            nom: true,
-            email: true,
+    // Utiliser une transaction ou Promise.all pour optimiser
+    const [organization, membership] = await Promise.all([
+      prisma.organization.findUnique({
+        where: {
+          id: organizationId,
+          isActive: true,
+        },
+        include: {
+          owner: {
+            select: {
+              id: true,
+              prenom: true,
+              nom: true,
+              email: true,
+              phone: true,
+            },
+          },
+          settings: true,
+          subscription: true,
+          _count: {
+            select: {
+              members: {
+                where: { status: "ACTIVE" },
+              },
+              contributionPlans: {
+                where: { isActive: true },
+              },
+              contributions: {
+                where: { status: { in: ["PAID", "PARTIAL"] } },
+              },
+              debts: {
+                where: { status: { in: ["ACTIVE", "PARTIALLY_PAID"] } },
+              },
+            },
           },
         },
-        settings: true,
-        subscription: true,
-        _count: {
-          select: {
-            members: {
-              where: { status: "ACTIVE" },
-            },
-            contributionPlans: {
-              where: { isActive: true },
-            },
-            contributions: true,
-          },
+      }),
+      prisma.membership.findFirst({
+        where: {
+          userId,
+          organizationId,
+          status: "ACTIVE",
         },
-      },
-    });
+        select: {
+          id: true,
+          role: true,
+          joinDate: true,
+          status: true,
+          loginId: true,
+          memberNumber: true,
+          createdAt: true,
+          profile: true,
+        },
+      }),
+    ]);
 
     if (!organization) {
       throw new Error("Organisation non trouvée");
     }
 
-    return organization;
+    if (!membership) {
+      throw new Error("Accès non autorisé à cette organisation");
+    }
+
+    // Retourner l'organization avec toutes les informations
+    return {
+      ...organization,
+      userRole: membership.role,
+      userMembership: membership,
+    };
   }
 
   async getUserOrganizations(userId) {
