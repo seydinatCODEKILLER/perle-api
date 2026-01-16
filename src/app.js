@@ -6,6 +6,7 @@ import {
   authRoute,
   contributionPlanRoute,
   contributionRoute,
+  dashboardRoute,
   debtRoute,
   membershipRoute,
   organisationRoute,
@@ -39,6 +40,7 @@ app.use("/api/contributions", contributionRoute.routes);
 app.use("/api/debts", debtRoute.routes);
 app.use("/api/transactions", transactionRoute.routes);
 app.use("/api/subscriptions", subscriptionRoute.routes);
+app.use("/api/statistiques", dashboardRoute.routes);
 
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(specs));
 
