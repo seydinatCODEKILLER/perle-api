@@ -5,76 +5,93 @@ export default class DashboardController {
     this.service = new DashboardService();
   }
 
-  async getAdminDashboard(req, res) {
+  /**
+   * Dashboard de GESTION
+   * Route: GET /organizations/:organizationId/dashboard/management
+   */
+  async getManagementDashboard(req, res) {
     try {
       const { organizationId } = req.params;
       const userId = req.user.id;
 
-      const dashboard = await this.service.getAdminDashboard(
+      const dashboard = await this.service.getManagementDashboard(
         organizationId,
-        userId
+        userId,
       );
 
-      return res.success(dashboard, "Dashboard ADMIN récupéré avec succès");
+      return res.success(
+        dashboard,
+        "Dashboard de gestion récupéré avec succès",
+      );
     } catch (error) {
       const statusCode = error.message.includes("Permissions") ? 403 : 400;
       return res.error(error.message, statusCode);
     }
   }
 
-  async getFinancialManagerDashboard(req, res) {
+  /**
+   * Dashboard PERSONNEL
+   * Route: GET /organizations/:organizationId/dashboard/personal
+   * ✅ Accessible par TOUS les rôles
+   */
+  async getPersonalDashboard(req, res) {
     try {
       const { organizationId } = req.params;
       const userId = req.user.id;
 
-      const dashboard = await this.service.getFinancialManagerDashboard(
+      const dashboard = await this.service.getPersonalDashboard(
         organizationId,
-        userId
+        userId,
       );
 
-      return res.success(dashboard, "Dashboard FINANCIAL MANAGER récupéré avec succès");
+      return res.success(dashboard, "Dashboard personnel récupéré avec succès");
     } catch (error) {
       const statusCode = error.message.includes("Permissions") ? 403 : 400;
       return res.error(error.message, statusCode);
     }
   }
 
-  async getMemberDashboard(req, res) {
-    try {
-      const { organizationId } = req.params;
-      const userId = req.user.id;
-      const { membershipId } = req.query;
-
-      if (!membershipId) {
-        return res.error("L'ID du membership est requis", 400);
-      }
-
-      const dashboard = await this.service.getMemberDashboard(
-        organizationId,
-        membershipId,
-        userId
-      );
-
-      return res.success(dashboard, "Dashboard MEMBRE récupéré avec succès");
-    } catch (error) {
-      const statusCode = error.message.includes("Permissions") ? 403 : 400;
-      return res.error(error.message, statusCode);
-    }
-  }
-
+  /**
+   * Route AUTO avec détection de l'espace
+   * Route: GET /organizations/:organizationId/dashboard?space=personal|management
+   */
   async getAutoDashboard(req, res) {
     try {
       const { organizationId } = req.params;
+      const { space } = req.query; // 'personal' ou 'management'
       const userId = req.user.id;
 
       const dashboard = await this.service.getAutoDashboard(
         organizationId,
-        userId
+        userId,
+        space,
       );
 
       return res.success(dashboard, "Dashboard récupéré avec succès");
     } catch (error) {
-      return res.error(error.message, 400);
+      const statusCode = error.message.includes("Permissions") ? 403 : 400;
+      return res.error(error.message, statusCode);
+    }
+  }
+
+  /**
+   * Route par défaut (pour la redirection initiale)
+   * Route: GET /organizations/:organizationId/dashboard
+   */
+  async getDefaultDashboard(req, res) {
+    try {
+      const { organizationId } = req.params;
+      const userId = req.user.id;
+
+      const result = await this.service.getDefaultDashboard(
+        organizationId,
+        userId,
+      );
+
+      return res.success(result, "Dashboard récupéré avec succès");
+    } catch (error) {
+      const statusCode = error.message.includes("Permissions") ? 403 : 400;
+      return res.error(error.message, statusCode);
     }
   }
 }
