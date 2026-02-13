@@ -1,9 +1,11 @@
 import ContributionPlanService from "../services/ContributionPlanService.js";
 import ContributionPlanSchema from "../schemas/ContributionPlanSchema.js";
+import ContributionLifecycleService from "../services/ContributionLifecycleService.js";
 
 export default class ContributionPlanController {
   constructor() {
     this.service = new ContributionPlanService();
+    this.contributionLifecycleService = new ContributionLifecycleService();
     this.schema = new ContributionPlanSchema();
   }
 
@@ -109,31 +111,13 @@ export default class ContributionPlanController {
     }
   }
 
-  async deleteContributionPlan(req, res) {
-    try {
-      const { organizationId, id } = req.params;
-      const userId = req.user.id;
-
-      const plan = await this.service.deleteContributionPlan(
-        organizationId,
-        id,
-        userId
-      );
-
-      return res.success(plan, "Plan de cotisation supprimé avec succès");
-    } catch (error) {
-      const statusCode = error.message.includes("Permissions") ? 403 : 400;
-      return res.error(error.message, statusCode);
-    }
-  }
-
   async generateContributions(req, res) {
     try {
       const { organizationId, id } = req.params;
       const userId = req.user.id;
       const { force, dueDateOffset } = req.body;
 
-      const result = await this.service.generateContributionsForPlan(
+      const result = await this.contributionLifecycleService.generateForPlan(
         organizationId,
         id,
         userId,
@@ -156,7 +140,7 @@ export default class ContributionPlanController {
       const userId = req.user.id;
       const { membershipId } = req.body;
 
-      const contribution = await this.service.assignPlanToMember(
+      const contribution = await this.contributionLifecycleService.assignPlanToMember(
         organizationId,
         id,
         membershipId,

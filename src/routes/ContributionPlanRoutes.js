@@ -218,33 +218,6 @@ export default class ContributionPlanRoutes {
 
     /**
      * @swagger
-     * /api/contribution-plans/{organizationId}/plans/{id}:
-     *   delete:
-     *     summary: Supprimer un plan de cotisation
-     *     tags: [Contribution Plans]
-     *     security:
-     *       - bearerAuth: []
-     *     parameters:
-     *       - in: path
-     *         name: organizationId
-     *         required: true
-     *         schema:
-     *           type: string
-     *       - in: path
-     *         name: id
-     *         required: true
-     *         schema:
-     *           type: string
-     *     responses:
-     *       200:
-     *         description: Plan supprimé
-     */
-    this.router.delete("/:organizationId/plans/:id", (req, res) =>
-      this.controller.deleteContributionPlan(req, res)
-    );
-
-    /**
-     * @swagger
      * /api/contribution-plans/{organizationId}/plans/{id}/generate-contributions:
      *   post:
      *     summary: Générer des cotisations pour tous les membres
