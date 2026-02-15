@@ -15,14 +15,23 @@ export default class ContributionLifecycleService {
       },
     });
 
-    if (!membership) throw new Error("Accès non autorisé");
+    if (!membership) {
+      throw new Error("Accès non autorisé");
+    }
+
     return membership;
   }
 
   #getMonthRange(date) {
     const start = new Date(date.getFullYear(), date.getMonth(), 1);
     const end = new Date(date.getFullYear(), date.getMonth() + 1, 1);
-    return { gte: start, lt: end, from: start, to: end };
+
+    return {
+      gte: start,
+      lt: end,
+      from: start,
+      to: end,
+    };
   }
 
   #calculateDueDate(frequency, offsetDays = 0) {
@@ -37,11 +46,12 @@ export default class ContributionLifecycleService {
 
     (map[frequency] || (() => d.setDate(d.getDate() + 30)))();
     d.setDate(d.getDate() + offsetDays);
+
     return d;
   }
 
   /* ======================================================
-     GÉNÉRATION EN MASSE
+     GÉNÉRATION EN MASSE (MongoDB SAFE)
   ====================================================== */
 
   async generateForPlan(organizationId, planId, userId, options = {}) {
@@ -54,40 +64,66 @@ export default class ContributionLifecycleService {
     );
 
     const plan = await prisma.contributionPlan.findFirst({
-      where: { id: planId, organizationId, isActive: true },
+      where: {
+        id: planId,
+        organizationId,
+        isActive: true,
+      },
     });
 
-    if (!plan) throw new Error("Plan invalide ou inactif");
+    if (!plan) {
+      throw new Error("Plan invalide ou inactif");
+    }
 
     const dueDate = this.#calculateDueDate(plan.frequency, dueDateOffset);
     const period = this.#getMonthRange(dueDate);
 
-    const existing = await prisma.contribution.count({
+    // 🔒 Protection métier contre les doublons (OBLIGATOIRE avec MongoDB)
+    const existingCount = await prisma.contribution.count({
       where: {
         contributionPlanId: planId,
-        dueDate: { gte: period.gte, lt: period.lt },
+        organizationId,
+        dueDate: {
+          gte: period.gte,
+          lt: period.lt,
+        },
       },
     });
 
-    if (existing > 0 && !force) {
+    if (existingCount > 0 && !force) {
       throw new Error("Cotisations déjà générées pour cette période");
     }
 
     const members = await prisma.membership.findMany({
-      where: { organizationId, status: "ACTIVE" },
-      select: { id: true },
+      where: {
+        organizationId,
+        status: "ACTIVE",
+      },
+      select: {
+        id: true,
+      },
     });
 
+    if (members.length === 0) {
+      throw new Error("Aucun membre actif trouvé");
+    }
+
     return prisma.$transaction(async (tx) => {
-      if (force && existing > 0) {
+      // 🔥 Forcer = suppression puis recréation
+      if (force && existingCount > 0) {
         await tx.contribution.deleteMany({
           where: {
             contributionPlanId: planId,
-            dueDate: { gte: period.gte, lt: period.lt },
+            organizationId,
+            dueDate: {
+              gte: period.gte,
+              lt: period.lt,
+            },
           },
         });
       }
 
+      // ✅ createMany SANS skipDuplicates (MongoDB)
       const result = await tx.contribution.createMany({
         data: members.map((m) => ({
           membershipId: m.id,
@@ -97,9 +133,9 @@ export default class ContributionLifecycleService {
           dueDate,
           status: "PENDING",
         })),
-        skipDuplicates: true,
       });
 
+      // 🧾 Audit
       await tx.auditLog.create({
         data: {
           action: "GENERATE",
@@ -108,15 +144,21 @@ export default class ContributionLifecycleService {
           userId,
           organizationId,
           membershipId: admin.id,
-          details: JSON.stringify({
-            generated: result.count,
-            period,
+          details: {
+            generatedCount: result.count,
+            periodFrom: period.from,
+            periodTo: period.to,
             dueDate,
-          }),
+            force,
+          },
         },
       });
 
-      return result;
+      return {
+        generated: result.count,
+        dueDate,
+        period,
+      };
     });
   }
 
@@ -132,10 +174,16 @@ export default class ContributionLifecycleService {
     );
 
     const plan = await prisma.contributionPlan.findFirst({
-      where: { id: planId, organizationId, isActive: true },
+      where: {
+        id: planId,
+        organizationId,
+        isActive: true,
+      },
     });
 
-    if (!plan) throw new Error("Plan invalide");
+    if (!plan) {
+      throw new Error("Plan invalide");
+    }
 
     const dueDate = this.#calculateDueDate(plan.frequency);
     const period = this.#getMonthRange(dueDate);
@@ -144,11 +192,17 @@ export default class ContributionLifecycleService {
       where: {
         membershipId,
         contributionPlanId: planId,
-        dueDate: { gte: period.gte, lt: period.lt },
+        organizationId,
+        dueDate: {
+          gte: period.gte,
+          lt: period.lt,
+        },
       },
     });
 
-    if (exists) throw new Error("Cotisation déjà existante");
+    if (exists) {
+      throw new Error("Cotisation déjà existante pour ce membre");
+    }
 
     const contribution = await prisma.contribution.create({
       data: {
@@ -176,7 +230,7 @@ export default class ContributionLifecycleService {
   }
 
   /* ======================================================
-     STATUT
+     MISE À JOUR DU STATUT
   ====================================================== */
 
   async updateContributionStatus(
@@ -191,12 +245,25 @@ export default class ContributionLifecycleService {
       ["ADMIN", "FINANCIAL_MANAGER"]
     );
 
-    const valid = ["PENDING", "PARTIAL", "PAID", "OVERDUE", "CANCELLED"];
-    if (!valid.includes(status)) throw new Error("Statut invalide");
+    const allowedStatuses = [
+      "PENDING",
+      "PARTIAL",
+      "PAID",
+      "OVERDUE",
+      "CANCELLED",
+    ];
+
+    if (!allowedStatuses.includes(status)) {
+      throw new Error("Statut invalide");
+    }
 
     const updated = await prisma.contribution.update({
-      where: { id: contributionId },
-      data: { status },
+      where: {
+        id: contributionId,
+      },
+      data: {
+        status,
+      },
     });
 
     await prisma.auditLog.create({
@@ -207,6 +274,7 @@ export default class ContributionLifecycleService {
         userId,
         organizationId,
         membershipId: admin.id,
+        details: { status },
       },
     });
 
