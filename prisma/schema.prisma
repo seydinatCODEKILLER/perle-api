@@ -216,27 +216,25 @@ model ContributionPlan {
 
 model Contribution {
   id                  String            @id @default(auto()) @map("_id") @db.ObjectId
-
   membershipId        String            @db.ObjectId
   contributionPlanId  String            @db.ObjectId
   organizationId      String            @db.ObjectId
-
   amount              Float
   amountPaid          Float             @default(0)
   paymentDate         DateTime?
   dueDate             DateTime
   status              ContributionStatus @default(PENDING)
-
   paymentMethod       PaymentMethod?
-  transactionId       String? @unique @db.ObjectId
-
+  
+  // Retirer @unique
+  transactionId       String?           @db.ObjectId
+  
   membership          Membership        @relation(fields: [membershipId], references: [id])
   contributionPlan    ContributionPlan  @relation(fields: [contributionPlanId], references: [id])
   organization        Organization      @relation(fields: [organizationId], references: [id])
   transaction         Transaction?      @relation(fields: [transactionId], references: [id])
-
+  
   partialPayments     PartialPayment[]
-
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
@@ -331,7 +329,7 @@ model Transaction {
 
   organization   Organization @relation(fields: [organizationId], references: [id])
   membership     Membership?  @relation(fields: [membershipId], references: [id])
-  contribution   Contribution?
+  contributions  Contribution[]
   repayment      Repayment?
 
   createdAt      DateTime @default(now())
