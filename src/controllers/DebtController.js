@@ -98,6 +98,28 @@ export default class DebtController {
     }
   }
 
+   async getMyDebts(req, res) {
+    try {
+      const { organizationId } = req.params;
+      const userId = req.user.id;
+      const { status, page, limit } = req.query;
+
+      const result = await this.service.getMyDebts(
+        organizationId,
+        userId,
+        {
+          status,
+          page: parseInt(page) || 1,
+          limit: parseInt(limit) || 10,
+        }
+      );
+
+      return res.success(result, "Dettes du membre récupérées avec succès");
+    } catch (error) {
+      return res.error(error.message, 400);
+    }
+  }
+
   async addRepayment(req, res) {
     try {
       // Validation des données

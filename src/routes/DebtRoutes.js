@@ -60,7 +60,7 @@ export default class DebtRoutes {
      *         description: Dette créée avec succès
      */
     this.router.post("/:organizationId", (req, res) =>
-      this.controller.createDebt(req, res)
+      this.controller.createDebt(req, res),
     );
 
     /**
@@ -105,7 +105,7 @@ export default class DebtRoutes {
      *         description: Liste des dettes
      */
     this.router.get("/:organizationId", (req, res) =>
-      this.controller.getOrganizationDebts(req, res)
+      this.controller.getOrganizationDebts(req, res),
     );
 
     /**
@@ -127,7 +127,7 @@ export default class DebtRoutes {
      *         description: Résumé des dettes
      */
     this.router.get("/:organizationId/summary", (req, res) =>
-      this.controller.getDebtSummary(req, res)
+      this.controller.getDebtSummary(req, res),
     );
 
     /**
@@ -154,7 +154,7 @@ export default class DebtRoutes {
      *         description: Détails de la dette
      */
     this.router.get("/:organizationId/debt/:id", (req, res) =>
-      this.controller.getDebt(req, res)
+      this.controller.getDebt(req, res),
     );
 
     /**
@@ -181,7 +181,7 @@ export default class DebtRoutes {
      *         description: Historique des remboursements
      */
     this.router.get("/:organizationId/debt/:id/repayments", (req, res) =>
-      this.controller.getDebtRepayments(req, res)
+      this.controller.getDebtRepayments(req, res),
     );
 
     /**
@@ -223,7 +223,7 @@ export default class DebtRoutes {
      *         description: Remboursement ajouté
      */
     this.router.post("/:organizationId/debt/:id/add-repayment", (req, res) =>
-      this.controller.addRepayment(req, res)
+      this.controller.addRepayment(req, res),
     );
 
     /**
@@ -262,7 +262,7 @@ export default class DebtRoutes {
      *         description: Statut mis à jour
      */
     this.router.patch("/:organizationId/debt/:id/status", (req, res) =>
-      this.controller.updateDebtStatus(req, res)
+      this.controller.updateDebtStatus(req, res),
     );
 
     /**
@@ -304,7 +304,44 @@ export default class DebtRoutes {
      *         description: Dettes du membre
      */
     this.router.get("/:organizationId/members/:membershipId/debt", (req, res) =>
-      this.controller.getMemberDebts(req, res)
+      this.controller.getMemberDebts(req, res),
+    );
+
+    /**
+     * @swagger
+     * /api/debts/{organizationId}/my-debts:
+     *   get:
+     *     summary: Récupérer les dettes de l'utilisateur connecté
+     *     tags: [Debts]
+     *     security:
+     *       - bearerAuth: []
+     *     parameters:
+     *       - in: path
+     *         name: organizationId
+     *         required: true
+     *         schema:
+     *           type: string
+     *       - in: query
+     *         name: status
+     *         schema:
+     *           type: string
+     *           enum: [ACTIVE, PARTIALLY_PAID, PAID, OVERDUE, CANCELLED]
+     *       - in: query
+     *         name: page
+     *         schema:
+     *           type: integer
+     *           default: 1
+     *       - in: query
+     *         name: limit
+     *         schema:
+     *           type: integer
+     *           default: 10
+     *     responses:
+     *       200:
+     *         description: Dettes de l'utilisateur connecté
+     */
+    this.router.get("/:organizationId/my-debts", (req, res) =>
+      this.controller.getMyDebts(req, res),
     );
   }
 

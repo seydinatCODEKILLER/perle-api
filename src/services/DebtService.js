@@ -61,7 +61,7 @@ export default class DebtService {
     const membership = await this._getActiveMembership(
       currentUserId,
       organizationId,
-      [ROLES.ADMIN, ROLES.FINANCIAL_MANAGER]
+      [ROLES.ADMIN, ROLES.FINANCIAL_MANAGER],
     );
 
     const targetMembership = await prisma.membership.findUnique({
@@ -77,7 +77,7 @@ export default class DebtService {
 
     const initialAmount = this._parseAmount(
       debtData.initialAmount,
-      "montant initial"
+      "montant initial",
     );
 
     const debt = await prisma.debt.create({
@@ -227,18 +227,18 @@ export default class DebtService {
   }
 
   /* =========================
-     GET MEMBER DEBTS
+     GET MEMBER DEBTS ADMIN
   ========================= */
 
   async getMemberDebts(
     organizationId,
     membershipId,
     currentUserId,
-    filters = {}
+    filters = {},
   ) {
     const currentMembership = await this._getActiveMembership(
       currentUserId,
-      organizationId
+      organizationId,
     );
 
     if (
@@ -274,6 +274,58 @@ export default class DebtService {
           initialAmount: true,
           remainingAmount: true,
         },
+      }),
+    ]);
+
+    const totalRepaid =
+      (totals._sum.initialAmount || 0) - (totals._sum.remainingAmount || 0);
+
+    return {
+      debts,
+      totals: {
+        totalDebts: totals._sum.initialAmount || 0,
+        totalRemaining: totals._sum.remainingAmount || 0,
+        totalRepaid,
+      },
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /* =========================
+     GET MY DEBTS MEMBER
+  ========================= */
+
+  async getMyDebts(organizationId, currentUserId, filters = {}) {
+    const membership = await this._getActiveMembership(
+      currentUserId,
+      organizationId,
+    );
+
+    const { status, page = 1, limit = 10 } = filters;
+    const skip = (page - 1) * limit;
+
+    const where = {
+      organizationId,
+      membershipId: membership.id,
+      ...(status && { status }),
+    };
+
+    const [debts, total, totals] = await Promise.all([
+      prisma.debt.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.debt.count({ where }),
+      prisma.debt.aggregate({
+        where,
+        _sum: { initialAmount: true, remainingAmount: true },
       }),
     ]);
 
@@ -340,7 +392,7 @@ export default class DebtService {
     const membership = await this._getActiveMembership(
       currentUserId,
       organizationId,
-      [ROLES.ADMIN]
+      [ROLES.ADMIN],
     );
 
     if (!Object.values(DEBT_STATUS).includes(status)) {
