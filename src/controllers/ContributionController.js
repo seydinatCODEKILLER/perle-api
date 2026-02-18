@@ -11,14 +11,14 @@ export default class ContributionController {
     try {
       const { organizationId } = req.params;
       const userId = req.user.id;
-      const { 
-        status, 
-        membershipId, 
-        contributionPlanId, 
-        startDate, 
+      const {
+        status,
+        membershipId,
+        contributionPlanId,
+        startDate,
         endDate,
-        page, 
-        limit 
+        page,
+        limit,
       } = req.query;
 
       const result = await this.service.getContributions(
@@ -32,7 +32,7 @@ export default class ContributionController {
           endDate,
           page: parseInt(page) || 1,
           limit: parseInt(limit) || 10,
-        }
+        },
       );
 
       return res.success(result, "Cotisations récupérées avec succès");
@@ -49,7 +49,7 @@ export default class ContributionController {
       const contribution = await this.service.getContributionById(
         organizationId,
         id,
-        userId
+        userId,
       );
 
       return res.success(contribution, "Cotisation récupérée avec succès");
@@ -71,10 +71,13 @@ export default class ContributionController {
         organizationId,
         id,
         userId,
-        req.body
+        req.body,
       );
 
-      return res.success(contribution, "Cotisation marquée comme payée avec succès");
+      return res.success(
+        contribution,
+        "Cotisation marquée comme payée avec succès",
+      );
     } catch (error) {
       return res.error(error.message, 400);
     }
@@ -92,7 +95,7 @@ export default class ContributionController {
         organizationId,
         id,
         userId,
-        req.body
+        req.body,
       );
 
       return res.success(contribution, "Paiement partiel ajouté avec succès");
@@ -100,7 +103,7 @@ export default class ContributionController {
       return res.error(error.message, 400);
     }
   }
-  
+
   async getMemberContributions(req, res) {
     try {
       const { organizationId, membershipId } = req.params;
@@ -115,10 +118,38 @@ export default class ContributionController {
           status,
           page: parseInt(page) || 1,
           limit: parseInt(limit) || 10,
-        }
+        },
       );
 
-      return res.success(result, "Cotisations du membre récupérées avec succès");
+      return res.success(
+        result,
+        "Cotisations du membre récupérées avec succès",
+      );
+    } catch (error) {
+      return res.error(error.message, 400);
+    }
+  }
+
+  async getMyContributions(req, res) {
+    try {
+      const { organizationId } = req.params;
+      const userId = req.user.id;
+      const { status, page, limit } = req.query;
+
+      const result = await this.service.getMyContributions(
+        organizationId,
+        userId,
+        {
+          status,
+          page: parseInt(page) || 1,
+          limit: parseInt(limit) || 10,
+        },
+      );
+
+      return res.success(
+        result,
+        "Cotisations du membre récupérées avec succès",
+      );
     } catch (error) {
       return res.error(error.message, 400);
     }

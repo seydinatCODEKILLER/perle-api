@@ -145,7 +145,7 @@ export default class ContributionService {
         contributionPlan: true,
         partialPayments: { orderBy: { paymentDate: "desc" } },
         transaction: true,
-      }
+      },
     );
 
     return {
@@ -162,13 +162,13 @@ export default class ContributionService {
     const currentMembership = await this.#getActiveMembership(
       currentUserId,
       organizationId,
-      ["ADMIN", "FINANCIAL_MANAGER"]
+      ["ADMIN", "FINANCIAL_MANAGER"],
     );
 
     const contribution = await this.#getContributionOrFail(
       contributionId,
       organizationId,
-      { contributionPlan: true }
+      { contributionPlan: true },
     );
 
     if (contribution.status === "PAID") {
@@ -238,12 +238,12 @@ export default class ContributionService {
     organizationId,
     contributionId,
     currentUserId,
-    paymentData
+    paymentData,
   ) {
     const currentMembership = await this.#getActiveMembership(
       currentUserId,
       organizationId,
-      ["ADMIN", "FINANCIAL_MANAGER"]
+      ["ADMIN", "FINANCIAL_MANAGER"],
     );
 
     const contribution = await this.#getContributionOrFail(
@@ -252,7 +252,7 @@ export default class ContributionService {
       {
         organization: { include: { settings: true } },
         contributionPlan: true,
-      }
+      },
     );
 
     if (!contribution.organization.settings.allowPartialPayments) {
@@ -312,7 +312,7 @@ export default class ContributionService {
     organizationId,
     membershipId,
     currentUserId,
-    filters = {}
+    filters = {},
   ) {
     const { status, page = 1, limit = 10 } = filters;
     const skip = (page - 1) * limit;
@@ -335,7 +335,7 @@ export default class ContributionService {
       currentMembership.id !== membershipId
     ) {
       throw new Error(
-        "Permissions insuffisantes pour voir les cotisations de ce membre"
+        "Permissions insuffisantes pour voir les cotisations de ce membre",
       );
     }
 
@@ -383,6 +383,65 @@ export default class ContributionService {
       contributions: contributions.map((contribution) => ({
         ...contribution,
         remainingAmount: contribution.amount - contribution.amountPaid,
+      })),
+      totals: {
+        totalAmount: totals._sum.amount || 0,
+        totalPaid: totals._sum.amountPaid || 0,
+        totalRemaining:
+          (totals._sum.amount || 0) - (totals._sum.amountPaid || 0),
+      },
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  async getMyContributions(organizationId, currentUserId, filters = {}) {
+    const membership = await this.#getActiveMembership(
+      currentUserId,
+      organizationId,
+    );
+
+    const { status, page = 1, limit = 10 } = filters;
+    const skip = (page - 1) * limit;
+
+    const where = {
+      organizationId,
+      membershipId: membership.id,
+      ...(status && { status }),
+    };
+
+    const [contributions, total, totals] = await Promise.all([
+      prisma.contribution.findMany({
+        where,
+        include: {
+          contributionPlan: {
+            select: {
+              id: true,
+              name: true,
+              amount: true,
+              frequency: true,
+            },
+          },
+        },
+        skip,
+        take: limit,
+        orderBy: { dueDate: "desc" },
+      }),
+      prisma.contribution.count({ where }),
+      prisma.contribution.aggregate({
+        where,
+        _sum: { amount: true, amountPaid: true },
+      }),
+    ]);
+
+    return {
+      contributions: contributions.map((c) => ({
+        ...c,
+        remainingAmount: c.amount - c.amountPaid,
       })),
       totals: {
         totalAmount: totals._sum.amount || 0,

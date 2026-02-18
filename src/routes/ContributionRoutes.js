@@ -222,6 +222,43 @@ export default class ContributionRoutes {
     this.router.get("/:organizationId/members/:membershipId/contributions", (req, res) =>
       this.controller.getMemberContributions(req, res)
     );
+
+    /**
+     * @swagger
+     * /api/contributions/{organizationId}/my-contributions:
+     *   get:
+     *     summary: Récupérer les cotisations de l'utilisateur connecté
+     *     tags: [Contributions]
+     *     security:
+     *       - bearerAuth: []
+     *     parameters:
+     *       - in: path
+     *         name: organizationId
+     *         required: true
+     *         schema:
+     *           type: string
+     *       - in: query
+     *         name: status
+     *         schema:
+     *           type: string
+     *           enum: [PENDING, PAID, PARTIAL, OVERDUE, CANCELLED]
+     *       - in: query
+     *         name: page
+     *         schema:
+     *           type: integer
+     *           default: 1
+     *       - in: query
+     *         name : limit
+     *         schema:
+     *           type: integer
+     *           default: 10
+     *     responses:
+     *       200:
+     *         description: Cotisations de l'utilisateur connecté
+     */
+    this.router.get("/:organizationId/my-contributions", (req, res) =>
+      this.controller.getMyContributions(req, res)
+    );  
   }
 
   get routes() {
