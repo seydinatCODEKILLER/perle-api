@@ -18,7 +18,7 @@ export default class DebtController {
       const debt = await this.service.createDebt(
         organizationId,
         userId,
-        req.body
+        req.body,
       );
 
       return res.success(debt, "Dette créée avec succès", 201);
@@ -32,11 +32,7 @@ export default class DebtController {
       const { organizationId, id } = req.params;
       const userId = req.user.id;
 
-      const debt = await this.service.getDebtById(
-        organizationId,
-        id,
-        userId
-      );
+      const debt = await this.service.getDebtById(organizationId, id, userId);
 
       return res.success(debt, "Dette récupérée avec succès");
     } catch (error) {
@@ -49,13 +45,7 @@ export default class DebtController {
     try {
       const { organizationId } = req.params;
       const userId = req.user.id;
-      const { 
-        status, 
-        membershipId, 
-        search,
-        page, 
-        limit 
-      } = req.query;
+      const { status, membershipId, search, page, limit } = req.query;
 
       const result = await this.service.getOrganizationDebts(
         organizationId,
@@ -66,7 +56,7 @@ export default class DebtController {
           search,
           page: parseInt(page) || 1,
           limit: parseInt(limit) || 10,
-        }
+        },
       );
 
       return res.success(result, "Dettes récupérées avec succès");
@@ -89,7 +79,7 @@ export default class DebtController {
           status,
           page: parseInt(page) || 1,
           limit: parseInt(limit) || 10,
-        }
+        },
       );
 
       return res.success(result, "Dettes du membre récupérées avec succès");
@@ -98,21 +88,17 @@ export default class DebtController {
     }
   }
 
-   async getMyDebts(req, res) {
+  async getMyDebts(req, res) {
     try {
       const { organizationId } = req.params;
       const userId = req.user.id;
       const { status, page, limit } = req.query;
 
-      const result = await this.service.getMyDebts(
-        organizationId,
-        userId,
-        {
-          status,
-          page: parseInt(page) || 1,
-          limit: parseInt(limit) || 10,
-        }
-      );
+      const result = await this.service.getMyDebts(organizationId, userId, {
+        status,
+        page: parseInt(page) || 1,
+        limit: parseInt(limit) || 10,
+      });
 
       return res.success(result, "Dettes du membre récupérées avec succès");
     } catch (error) {
@@ -132,7 +118,7 @@ export default class DebtController {
         organizationId,
         id,
         userId,
-        req.body
+        req.body,
       );
 
       return res.success(debt, "Remboursement ajouté avec succès");
@@ -149,10 +135,13 @@ export default class DebtController {
       const repayments = await this.service.getDebtRepayments(
         organizationId,
         id,
-        userId
+        userId,
       );
 
-      return res.success(repayments, "Historique des remboursements récupéré avec succès");
+      return res.success(
+        repayments,
+        "Historique des remboursements récupéré avec succès",
+      );
     } catch (error) {
       const statusCode = error.message.includes("non autorisé") ? 403 : 404;
       return res.error(error.message, statusCode);
@@ -173,7 +162,7 @@ export default class DebtController {
         organizationId,
         id,
         userId,
-        status
+        status,
       );
 
       return res.success(debt, "Statut de la dette mis à jour avec succès");
@@ -187,14 +176,37 @@ export default class DebtController {
       const { organizationId } = req.params;
       const userId = req.user.id;
 
-      const summary = await this.service.getDebtSummary(
-        organizationId,
-        userId
-      );
+      const summary = await this.service.getDebtSummary(organizationId, userId);
 
       return res.success(summary, "Résumé des dettes récupéré avec succès");
     } catch (error) {
       return res.error(error.message, 400);
+    }
+  }
+
+  async cancelDebt(req, res) {
+    try {
+      const { organizationId, id } = req.params;
+      const userId = req.user.id;
+      const { reason } = req.body;
+
+      const debt = await this.service.cancelDebt(
+        organizationId,
+        id,
+        userId,
+        reason || "",
+      );
+
+      return res.success(debt, "Dette annulée avec succès");
+    } catch (error) {
+      const statusCode = error.message.includes("non autorisé")
+        ? 403
+        : error.message.includes("introuvable")
+          ? 404
+          : error.message.includes("déjà annulée")
+            ? 400
+            : 400;
+      return res.error(error.message, statusCode);
     }
   }
 }

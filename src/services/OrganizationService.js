@@ -7,31 +7,26 @@ export default class OrganizationService {
   }
 
   async createOrganization(ownerId, organizationData, logoFile) {
-    const { settings, ...orgData } = organizationData;
+    const { settings, wallet, ...orgData } = organizationData; // ✅ Extraire wallet
 
     let logoUrl = null;
     let logoPrefix = null;
 
     try {
-      // Upload du logo si fourni
       if (logoFile) {
         const timestamp = Date.now();
-        logoPrefix = `org_${orgData.name
-          .toLowerCase()
-          .replace(/\s+/g, "_")}_${timestamp}`;
+        logoPrefix = `org_${orgData.name.toLowerCase().replace(/\s+/g, "_")}_${timestamp}`;
         logoUrl = await this.mediaUploader.upload(
           logoFile,
           "organizations/logos",
-          logoPrefix
+          logoPrefix,
         );
       }
 
-      // Création de l'organisation avec transaction
       const organization = await prisma.$transaction(async (tx) => {
-        // Création des paramètres de l'organisation
+        // 1. Création des paramètres
         const orgSettings = await tx.organizationSettings.create({
           data: {
-            ...settings,
             allowPartialPayments: settings?.allowPartialPayments ?? false,
             autoReminders: settings?.autoReminders ?? true,
             reminderDays: settings?.reminderDays ?? [1, 3, 7],
@@ -42,7 +37,7 @@ export default class OrganizationService {
           },
         });
 
-        // Création de l'organisation
+        // 2. Création de l'organisation
         const newOrg = await tx.organization.create({
           data: {
             ...orgData,
@@ -52,18 +47,27 @@ export default class OrganizationService {
           },
           include: {
             owner: {
-              select: {
-                id: true,
-                prenom: true,
-                nom: true,
-                email: true,
-              },
+              select: { id: true, prenom: true, nom: true, email: true },
             },
             settings: true,
           },
         });
 
-        // Création automatique d'un abonnement gratuit
+        // 3. ✅ Création automatique du Wallet avec initialBalance
+        const initialBalance = parseFloat(wallet?.initialBalance) || 0;
+
+        await tx.organizationWallet.create({
+          data: {
+            organizationId: newOrg.id,
+            initialBalance: initialBalance,
+            currentBalance: initialBalance, // ✅ Le solde actuel = solde initial
+            totalIncome: initialBalance > 0 ? initialBalance : 0, // ✅ Si balance initiale > 0, c'est un revenu
+            totalExpenses: 0,
+            currency: newOrg.currency || "XOF",
+          },
+        });
+
+        // 4. Création de l'abonnement
         await tx.subscription.create({
           data: {
             organizationId: newOrg.id,
@@ -77,7 +81,7 @@ export default class OrganizationService {
           },
         });
 
-        // Ajout du propriétaire comme membre ADMIN
+        // 5. Ajout du propriétaire comme ADMIN
         await tx.membership.create({
           data: {
             userId: ownerId,
@@ -89,12 +93,27 @@ export default class OrganizationService {
           },
         });
 
+        // 6. ✅ Audit log avec initialBalance
+        await tx.auditLog.create({
+          data: {
+            organizationId: newOrg.id,
+            userId: ownerId,
+            action: "CREATE_ORGANIZATION_WITH_WALLET",
+            resource: "Organization",
+            resourceId: newOrg.id,
+            details: {
+              organizationName: newOrg.name,
+              walletCreated: true,
+              initialBalance: initialBalance,
+            },
+          },
+        });
+
         return newOrg;
       });
 
       return organization;
     } catch (error) {
-      // Rollback de l'upload si erreur
       if (logoUrl && logoPrefix) {
         await this.mediaUploader.rollback(logoPrefix);
       }
@@ -103,13 +122,9 @@ export default class OrganizationService {
   }
 
   async getOrganizationById(organizationId, userId) {
-    // Utiliser une transaction ou Promise.all pour optimiser
     const [organization, membership] = await Promise.all([
       prisma.organization.findUnique({
-        where: {
-          id: organizationId,
-          isActive: true,
-        },
+        where: { id: organizationId, isActive: true },
         include: {
           owner: {
             select: {
@@ -122,17 +137,12 @@ export default class OrganizationService {
           },
           settings: true,
           subscription: true,
+          wallet: true, // ✅ AJOUT : Inclure le wallet
           _count: {
             select: {
-              members: {
-                where: { status: "ACTIVE" },
-              },
-              contributionPlans: {
-                where: { isActive: true },
-              },
-              contributions: {
-                where: { status: { in: ["PAID", "PARTIAL"] } },
-              },
+              members: { where: { status: "ACTIVE" } },
+              contributionPlans: { where: { isActive: true } },
+              contributions: { where: { status: { in: ["PAID", "PARTIAL"] } } },
               debts: {
                 where: { status: { in: ["ACTIVE", "PARTIALLY_PAID"] } },
               },
@@ -141,11 +151,7 @@ export default class OrganizationService {
         },
       }),
       prisma.membership.findFirst({
-        where: {
-          userId,
-          organizationId,
-          status: "ACTIVE",
-        },
+        where: { userId, organizationId, status: "ACTIVE" },
         select: {
           id: true,
           role: true,
@@ -159,15 +165,9 @@ export default class OrganizationService {
       }),
     ]);
 
-    if (!organization) {
-      throw new Error("Organisation non trouvée");
-    }
+    if (!organization) throw new Error("Organisation non trouvée");
+    if (!membership) throw new Error("Accès non autorisé à cette organisation");
 
-    if (!membership) {
-      throw new Error("Accès non autorisé à cette organisation");
-    }
-
-    // Retourner l'organization avec toutes les informations
     return {
       ...organization,
       userRole: membership.role,
@@ -180,37 +180,27 @@ export default class OrganizationService {
       where: {
         userId,
         status: "ACTIVE",
-        organization: {
-          isActive: true,
-        },
+        organization: { isActive: true },
       },
       include: {
         organization: {
           include: {
             owner: {
-              select: {
-                id: true,
-                prenom: true,
-                nom: true,
-                email: true,
-              },
+              select: { id: true, prenom: true, nom: true, email: true },
             },
             settings: true,
             subscription: true,
+            wallet: true, // ✅ AJOUT : Inclure le wallet
             _count: {
               select: {
-                members: {
-                  where: { status: "ACTIVE" },
-                },
+                members: { where: { status: "ACTIVE" } },
               },
             },
           },
         },
       },
       orderBy: {
-        organization: {
-          createdAt: "desc",
-        },
+        organization: { createdAt: "desc" },
       },
     });
 
@@ -233,7 +223,7 @@ export default class OrganizationService {
 
     if (!membership) {
       throw new Error(
-        "Permissions insuffisantes pour modifier cette organisation"
+        "Permissions insuffisantes pour modifier cette organisation",
       );
     }
 
@@ -257,7 +247,7 @@ export default class OrganizationService {
         logoUrl = await this.mediaUploader.upload(
           logoFile,
           "organizations/logos",
-          logoPrefix
+          logoPrefix,
         );
       }
 
@@ -332,18 +322,24 @@ export default class OrganizationService {
   }
 
   async deactivateOrganization(organizationId, userId) {
-    // Seul le propriétaire peut désactiver l'organisation
     const organization = await prisma.organization.findUnique({
       where: { id: organizationId },
-      include: { owner: true },
+      include: {
+        owner: true,
+        wallet: true, // ✅ AJOUT
+      },
     });
 
-    if (!organization) {
-      throw new Error("Organisation non trouvée");
-    }
-
+    if (!organization) throw new Error("Organisation non trouvée");
     if (organization.ownerId !== userId) {
       throw new Error("Seul le propriétaire peut désactiver l'organisation");
+    }
+
+    // ✅ NOUVEAU : Vérifier que le wallet est soldé
+    if (organization.wallet && organization.wallet.currentBalance !== 0) {
+      throw new Error(
+        `Impossible de désactiver : le portefeuille contient ${organization.wallet.currentBalance} ${organization.wallet.currency}. Veuillez d'abord solder le compte.`,
+      );
     }
 
     const deactivatedOrg = await prisma.organization.update({
@@ -351,12 +347,7 @@ export default class OrganizationService {
       data: { isActive: false },
       include: {
         owner: {
-          select: {
-            id: true,
-            prenom: true,
-            nom: true,
-            email: true,
-          },
+          select: { id: true, prenom: true, nom: true, email: true },
         },
       },
     });
@@ -403,18 +394,11 @@ export default class OrganizationService {
   }
 
   async getOrganizationStats(organizationId, userId) {
-    // Vérifier l'accès
     const membership = await prisma.membership.findFirst({
-      where: {
-        userId,
-        organizationId,
-        status: "ACTIVE",
-      },
+      where: { userId, organizationId, status: "ACTIVE" },
     });
 
-    if (!membership) {
-      throw new Error("Accès non autorisé à cette organisation");
-    }
+    if (!membership) throw new Error("Accès non autorisé à cette organisation");
 
     const [
       memberCount,
@@ -423,54 +407,67 @@ export default class OrganizationService {
       pendingContributions,
       totalDebts,
       recentTransactions,
+      wallet, // ✅ AJOUT
+      totalIncome, // ✅ AJOUT
+      totalExpenses, // ✅ AJOUT
     ] = await Promise.all([
-      // Nombre de membres actifs
       prisma.membership.count({
-        where: {
-          organizationId,
-          status: "ACTIVE",
-        },
+        where: { organizationId, status: "ACTIVE" },
       }),
 
-      // Plans de cotisation actifs
       prisma.contributionPlan.count({
-        where: {
-          organizationId,
-          isActive: true,
-        },
+        where: { organizationId, isActive: true },
       }),
 
-      // Total des cotisations
       prisma.contribution.aggregate({
         where: { organizationId },
         _sum: { amount: true },
       }),
 
-      // Cotisations en attente
       prisma.contribution.count({
-        where: {
-          organizationId,
-          status: "PENDING",
-        },
+        where: { organizationId, status: "PENDING" },
       }),
 
-      // Dettes actives
       prisma.debt.aggregate({
-        where: {
-          organizationId,
-          status: "ACTIVE",
-        },
+        where: { organizationId, status: "ACTIVE" },
         _sum: { remainingAmount: true },
       }),
 
-      // Transactions récentes (30 derniers jours)
       prisma.transaction.count({
         where: {
           organizationId,
-          createdAt: {
-            gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-          },
+          createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
         },
+      }),
+
+      // ✅ NOUVEAU : Stats du wallet
+      prisma.organizationWallet.findUnique({
+        where: { organizationId },
+        select: {
+          currentBalance: true,
+          totalIncome: true,
+          totalExpenses: true,
+          currency: true,
+        },
+      }),
+
+      // ✅ NOUVEAU : Total des revenus (transactions)
+      prisma.transaction.aggregate({
+        where: {
+          organizationId,
+          paymentStatus: "COMPLETED",
+          type: { in: ["CONTRIBUTION", "DEBT_REPAYMENT", "DONATION"] },
+        },
+        _sum: { amount: true },
+      }),
+
+      // ✅ NOUVEAU : Total des dépenses
+      prisma.expense.aggregate({
+        where: {
+          organizationId,
+          status: { in: ["APPROVED", "PAID"] },
+        },
+        _sum: { amount: true },
       }),
     ]);
 
@@ -481,6 +478,16 @@ export default class OrganizationService {
       pendingContributions,
       activeDebts: totalDebts._sum.remainingAmount || 0,
       recentTransactions,
+
+      // ✅ NOUVEAU : Stats financières
+      financial: {
+        currentBalance: wallet?.currentBalance || 0,
+        totalIncome: totalIncome._sum.amount || 0,
+        totalExpenses: totalExpenses._sum.amount || 0,
+        currency: wallet?.currency || "XOF",
+        netBalance:
+          (totalIncome._sum.amount || 0) - (totalExpenses._sum.amount || 0),
+      },
     };
   }
 

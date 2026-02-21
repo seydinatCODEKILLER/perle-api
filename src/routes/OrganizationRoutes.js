@@ -1,8 +1,8 @@
-// routes/OrganizationRoutes.js
 import express from "express";
 import OrganizationController from "../controllers/OrganizationController.js";
 import AuthMiddleware from "../middlewares/AuthMiddleware.js";
 import upload from "../config/multer.js";
+import { parseNestedFormData } from "../middlewares/parseFormData.middleware.js";
 
 export default class OrganizationRoutes {
   constructor() {
@@ -57,12 +57,68 @@ export default class OrganizationRoutes {
      *               logo:
      *                 type: string
      *                 format: binary
+     *               wallet.initialBalance:
+     *                 type: number
+     *                 description: "Solde initial du portefeuille (optionnel, défaut: 0)"
+     *                 example: 100000
+     *                 minimum: 0
+     *               settings.allowPartialPayments:
+     *                 type: boolean
+     *                 default: false
+     *               settings.autoReminders:
+     *                 type: boolean
+     *                 default: true
+     *               settings.reminderDays:
+     *                 type: array
+     *                 items:
+     *                   type: integer
+     *                 default: [1, 3, 7]
+     *               settings.emailNotifications:
+     *                 type: boolean
+     *                 default: true
+     *               settings.smsNotifications:
+     *                 type: boolean
+     *                 default: false
+     *               settings.whatsappNotifications:
+     *                 type: boolean
+     *                 default: false
+     *               settings.sessionTimeout:
+     *                 type: integer
+     *                 default: 60
      *     responses:
      *       201:
-     *         description: Organisation créée avec succès
+     *         description: Organisation créée avec succès (avec wallet initialisé)
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 success:
+     *                   type: boolean
+     *                 data:
+     *                   type: object
+     *                   properties:
+     *                     id:
+     *                       type: string
+     *                     name:
+     *                       type: string
+     *                     type:
+     *                       type: string
+     *                     currency:
+     *                       type: string
+     *                     walletCreated:
+     *                       type: boolean
+     *                       example: true
+     *       400:
+     *         description: Données invalides
+     *       401:
+     *         description: Non authentifié
      */
-    this.router.post("/", upload.single("logo"), (req, res) =>
-      this.controller.createOrganization(req, res)
+    this.router.post(
+      "/",
+      upload.single("logo"),
+      parseNestedFormData,
+      (req, res) => this.controller.createOrganization(req, res),
     );
 
     /**
@@ -78,7 +134,7 @@ export default class OrganizationRoutes {
      *         description: Liste des organisations
      */
     this.router.get("/", (req, res) =>
-      this.controller.getUserOrganizations(req, res)
+      this.controller.getUserOrganizations(req, res),
     );
 
     /**
@@ -168,7 +224,7 @@ export default class OrganizationRoutes {
      *               $ref: '#/components/schemas/Error'
      */
     this.router.get("/inactive", (req, res) =>
-      this.controller.getInactiveOrganizations(req, res)
+      this.controller.getInactiveOrganizations(req, res),
     );
 
     /**
@@ -206,7 +262,7 @@ export default class OrganizationRoutes {
      *         description: Résultats de la recherche
      */
     this.router.get("/search", (req, res) =>
-      this.controller.searchOrganizations(req, res)
+      this.controller.searchOrganizations(req, res),
     );
 
     /**
@@ -228,7 +284,7 @@ export default class OrganizationRoutes {
      *         description: Détails de l'organisation
      */
     this.router.get("/:id", (req, res) =>
-      this.controller.getOrganization(req, res)
+      this.controller.getOrganization(req, res),
     );
 
     /**
@@ -275,7 +331,7 @@ export default class OrganizationRoutes {
      *         description: Organisation mise à jour
      */
     this.router.put("/:id", upload.single("logo"), (req, res) =>
-      this.controller.updateOrganization(req, res)
+      this.controller.updateOrganization(req, res),
     );
 
     /**
@@ -320,7 +376,7 @@ export default class OrganizationRoutes {
      *         description: Paramètres mis à jour
      */
     this.router.patch("/:id/settings", (req, res) =>
-      this.controller.updateOrganizationSettings(req, res)
+      this.controller.updateOrganizationSettings(req, res),
     );
 
     /**
@@ -342,7 +398,7 @@ export default class OrganizationRoutes {
      *         description: Statistiques de l'organisation
      */
     this.router.get("/:id/stats", (req, res) =>
-      this.controller.getOrganizationStats(req, res)
+      this.controller.getOrganizationStats(req, res),
     );
 
     /**
@@ -364,7 +420,7 @@ export default class OrganizationRoutes {
      *         description: Organisation désactivée
      */
     this.router.patch("/:id/deactivate", (req, res) =>
-      this.controller.deactivateOrganization(req, res)
+      this.controller.deactivateOrganization(req, res),
     );
 
     /**
@@ -412,7 +468,7 @@ export default class OrganizationRoutes {
      *                   type: string
      */
     this.router.patch("/:id/reactivate", (req, res) =>
-      this.controller.reactivateOrganization(req, res)
+      this.controller.reactivateOrganization(req, res),
     );
   }
 

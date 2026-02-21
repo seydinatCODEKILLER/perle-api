@@ -10,7 +10,7 @@ export default class ContributionSchema {
         .positive({ message: "Le montant doit être positif" }),
       paymentMethod: z.enum(
         ["CASH", "MOBILE_MONEY", "BANK_TRANSFER", "CHECK", "CREDIT_CARD"],
-        { message: "Méthode de paiement invalide" }
+        { message: "Méthode de paiement invalide" },
       ),
     });
 
@@ -24,11 +24,22 @@ export default class ContributionSchema {
         .positive({ message: "Le montant doit être positif" }),
       paymentMethod: z.enum(
         ["CASH", "MOBILE_MONEY", "BANK_TRANSFER", "CHECK", "CREDIT_CARD"],
-        { message: "Méthode de paiement invalide" }
+        { message: "Méthode de paiement invalide" },
       ),
     });
 
     this.#validateSchema(schema, data);
+  }
+
+  validateCancel(data) {
+    const schema = z.object({
+      reason: z
+        .string()
+        .max(500, { message: "La raison ne peut pas dépasser 500 caractères" })
+        .optional(),
+    });
+
+    return this.#validateSchema(schema, data);
   }
 
   #validateSchema(schema, data) {

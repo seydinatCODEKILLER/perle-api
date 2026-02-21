@@ -102,6 +102,14 @@ export default class TransactionService {
           organization: {
             select: { id: true, name: true },
           },
+          wallet: {
+            // ✅ AJOUT : Inclure le wallet lié
+            select: {
+              id: true,
+              currentBalance: true,
+              currency: true,
+            },
+          },
         },
         skip,
         take: limit,
@@ -165,6 +173,14 @@ export default class TransactionService {
             currency: true,
           },
         },
+        wallet: {
+          // ✅ AJOUT : Wallet lié
+          select: {
+            id: true,
+            currentBalance: true,
+            currency: true,
+          },
+        },
         contribution: {
           select: {
             id: true,
@@ -177,6 +193,15 @@ export default class TransactionService {
             id: true,
             amount: true,
             debt: { select: { title: true } },
+          },
+        },
+        expense: {
+          // ✅ AJOUT : Dépense liée (si applicable)
+          select: {
+            id: true,
+            title: true,
+            category: true,
+            status: true,
           },
         },
       },
@@ -197,7 +222,9 @@ export default class TransactionService {
     await this.#getActiveMembership(currentUserId, organizationId);
 
     if (!searchTerm || searchTerm.trim().length < 2) {
-      throw new Error("Le terme de recherche doit contenir au moins 2 caractères");
+      throw new Error(
+        "Le terme de recherche doit contenir au moins 2 caractères",
+      );
     }
 
     const transactions = await prisma.transaction.findMany({
@@ -234,6 +261,14 @@ export default class TransactionService {
             },
           },
         },
+        wallet: {
+          // ✅ AJOUT
+          select: {
+            id: true,
+            currentBalance: true,
+            currency: true,
+          },
+        },
       },
       take: 50,
       orderBy: { createdAt: "desc" },
@@ -254,7 +289,7 @@ export default class TransactionService {
     organizationId,
     membershipId,
     currentUserId,
-    filters = {}
+    filters = {},
   ) {
     const {
       type,
@@ -270,7 +305,7 @@ export default class TransactionService {
 
     const currentMembership = await this.#getActiveMembership(
       currentUserId,
-      organizationId
+      organizationId,
     );
 
     if (
@@ -298,6 +333,14 @@ export default class TransactionService {
           organization: {
             select: { id: true, name: true, currency: true },
           },
+          wallet: {
+            // ✅ AJOUT
+            select: {
+              id: true,
+              currentBalance: true,
+              currency: true,
+            },
+          },
         },
         skip,
         take: limit,
@@ -323,6 +366,131 @@ export default class TransactionService {
         limit,
         total,
         pages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  /* =======================
+   ✅ VÉRIFICATION COHÉRENCE
+======================== */
+
+  async verifyWalletIntegrity(organizationId, currentUserId) {
+    const membership = await this.#getActiveMembership(
+      currentUserId,
+      organizationId,
+    );
+
+    if (membership.role !== "ADMIN") {
+      throw new Error(
+        "Seul un administrateur peut vérifier la cohérence du wallet",
+      );
+    }
+
+    // Récupérer le wallet
+    const wallet = await prisma.organizationWallet.findUnique({
+      where: { organizationId },
+    });
+
+    if (!wallet) {
+      throw new Error("Wallet non trouvé");
+    }
+
+    // Calculer les totaux réels depuis les transactions
+    const [income, expenses] = await Promise.all([
+      prisma.transaction.aggregate({
+        where: {
+          organizationId,
+          paymentStatus: "COMPLETED",
+          type: { in: ["CONTRIBUTION", "DEBT_REPAYMENT", "DONATION", "OTHER"] },
+        },
+        _sum: { amount: true },
+      }),
+
+      prisma.expense.aggregate({
+        where: {
+          organizationId,
+          status: { in: ["APPROVED", "PAID"] },
+        },
+        _sum: { amount: true },
+      }),
+    ]);
+
+    const calculatedIncome = income._sum.amount || 0;
+    const calculatedExpenses = expenses._sum.amount || 0;
+    const calculatedBalance = calculatedIncome - calculatedExpenses;
+
+    const isConsistent =
+      Math.abs(wallet.currentBalance - calculatedBalance) < 0.01;
+
+    return {
+      wallet: {
+        currentBalance: wallet.currentBalance,
+        totalIncome: wallet.totalIncome,
+        totalExpenses: wallet.totalExpenses,
+      },
+      calculated: {
+        income: calculatedIncome,
+        expenses: calculatedExpenses,
+        balance: calculatedBalance,
+      },
+      isConsistent,
+      discrepancy: wallet.currentBalance - calculatedBalance,
+    };
+  }
+
+  /* =======================
+   📊 STATISTIQUES PAR TYPE
+======================== */
+
+  async getTransactionStatsByType(organizationId, currentUserId, filters = {}) {
+    await this.#getActiveMembership(currentUserId, organizationId);
+
+    const { startDate, endDate } = filters;
+
+    const whereClause = {
+      organizationId,
+      paymentStatus: "COMPLETED",
+      ...(this.#buildDateFilter(startDate, endDate) && {
+        createdAt: this.#buildDateFilter(startDate, endDate),
+      }),
+    };
+
+    // Grouper par type de transaction
+    const statsByType = await prisma.transaction.groupBy({
+      by: ["type"],
+      where: whereClause,
+      _sum: {
+        amount: true,
+      },
+      _count: {
+        id: true,
+      },
+    });
+
+    // Récupérer le wallet actuel
+    const wallet = await prisma.organizationWallet.findUnique({
+      where: { organizationId },
+      select: {
+        currentBalance: true,
+        totalIncome: true,
+        totalExpenses: true,
+        currency: true,
+      },
+    });
+
+    return {
+      wallet,
+      byType: statsByType.map((stat) => ({
+        type: stat.type,
+        totalAmount: stat._sum.amount || 0,
+        count: stat._count.id,
+      })),
+      summary: {
+        totalTransactions: statsByType.reduce((sum, s) => sum + s._count.id, 0),
+        totalAmount: statsByType.reduce(
+          (sum, s) => sum + (s._sum.amount || 0),
+          0,
+        ),
       },
     };
   }

@@ -144,7 +144,17 @@ export default class ContributionService {
         },
         contributionPlan: true,
         partialPayments: { orderBy: { paymentDate: "desc" } },
-        transaction: true,
+        transaction: {
+          include: {
+            wallet: {
+              // ✅ AJOUT
+              select: {
+                currentBalance: true,
+                currency: true,
+              },
+            },
+          },
+        },
       },
     );
 
@@ -181,6 +191,16 @@ export default class ContributionService {
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      // ✅ AJOUT : Récupérer le wallet
+      const wallet = await tx.organizationWallet.findUnique({
+        where: { organizationId },
+      });
+
+      if (!wallet) {
+        throw new Error("Wallet non trouvé pour cette organisation");
+      }
+
+      // 1. Mettre à jour la cotisation
       const updatedContribution = await tx.contribution.update({
         where: { id: contributionId },
         data: {
@@ -192,13 +212,15 @@ export default class ContributionService {
         include: { contributionPlan: true },
       });
 
+      // 2. Créer la transaction liée au wallet
       const transaction = await tx.transaction.create({
         data: {
           organizationId,
           membershipId: contribution.membershipId,
+          walletId: wallet.id, // ✅ AJOUT : Lier au wallet
           type: "CONTRIBUTION",
           amount: paymentData.amountPaid,
-          currency: "XOF",
+          currency: wallet.currency,
           paymentMethod: paymentData.paymentMethod,
           paymentStatus: "COMPLETED",
           reference: `CONT-${Date.now()}-${contributionId.slice(-6)}`,
@@ -206,14 +228,25 @@ export default class ContributionService {
         },
       });
 
+      // 3. Lier la transaction à la cotisation
       await tx.contribution.update({
         where: { id: contributionId },
         data: { transactionId: transaction.id },
       });
 
+      // ✅ AJOUT : Mettre à jour le wallet
+      await tx.organizationWallet.update({
+        where: { id: wallet.id },
+        data: {
+          currentBalance: { increment: paymentData.amountPaid },
+          totalIncome: { increment: paymentData.amountPaid },
+        },
+      });
+
       return updatedContribution;
     });
 
+    // Audit log avec impact financier
     await prisma.auditLog.create({
       data: {
         action: "MARK_CONTRIBUTION_PAID",
@@ -222,6 +255,11 @@ export default class ContributionService {
         userId: currentUserId,
         organizationId,
         membershipId: currentMembership.id,
+        financialImpact: paymentData.amountPaid, // ✅ AJOUT
+        details: {
+          amount: paymentData.amountPaid,
+          contributionPlanName: contribution.contributionPlan.name,
+        },
       },
     });
 
@@ -267,6 +305,16 @@ export default class ContributionService {
     }
 
     const result = await prisma.$transaction(async (tx) => {
+      // ✅ AJOUT : Récupérer le wallet
+      const wallet = await tx.organizationWallet.findUnique({
+        where: { organizationId },
+      });
+
+      if (!wallet) {
+        throw new Error("Wallet non trouvé pour cette organisation");
+      }
+
+      // 1. Créer le paiement partiel
       await tx.partialPayment.create({
         data: {
           contributionId,
@@ -276,11 +324,12 @@ export default class ContributionService {
         },
       });
 
+      // 2. Mettre à jour la cotisation
       const newAmountPaid = contribution.amountPaid + paymentData.amount;
       const newStatus =
         newAmountPaid >= contribution.amount ? "PAID" : "PARTIAL";
 
-      return tx.contribution.update({
+      const updatedContribution = await tx.contribution.update({
         where: { id: contributionId },
         data: {
           amountPaid: newAmountPaid,
@@ -288,8 +337,40 @@ export default class ContributionService {
           ...(newStatus === "PAID" && { paymentDate: new Date() }),
         },
       });
+
+      // ✅ AJOUT : Créer transaction pour traçabilité
+      await tx.transaction.create({
+        data: {
+          organizationId,
+          membershipId: contribution.membershipId,
+          walletId: wallet.id,
+          type: "CONTRIBUTION",
+          amount: paymentData.amount,
+          currency: wallet.currency,
+          paymentMethod: paymentData.paymentMethod,
+          paymentStatus: "COMPLETED",
+          reference: `PARTIAL-${Date.now()}-${contributionId.slice(-6)}`,
+          description: `Paiement partiel pour ${contribution.contributionPlan.name}`,
+          metadata: {
+            contributionId,
+            isPartialPayment: true,
+          },
+        },
+      });
+
+      // ✅ AJOUT : Mettre à jour le wallet
+      await tx.organizationWallet.update({
+        where: { id: wallet.id },
+        data: {
+          currentBalance: { increment: paymentData.amount },
+          totalIncome: { increment: paymentData.amount },
+        },
+      });
+
+      return updatedContribution;
     });
 
+    // Audit log avec impact financier
     await prisma.auditLog.create({
       data: {
         action: "ADD_PARTIAL_PAYMENT",
@@ -298,6 +379,12 @@ export default class ContributionService {
         userId: currentUserId,
         organizationId,
         membershipId: currentMembership.id,
+        financialImpact: paymentData.amount, // ✅ AJOUT
+        details: {
+          amount: paymentData.amount,
+          newTotalPaid: result.amountPaid,
+          contributionPlanName: contribution.contributionPlan.name,
+        },
       },
     });
 
@@ -399,56 +486,79 @@ export default class ContributionService {
     };
   }
 
-  async getMyContributions(organizationId, currentUserId, filters = {}) {
-    const membership = await this.#getActiveMembership(
-      currentUserId,
-      organizationId,
-    );
+  async getContributions(organizationId, currentUserId, filters = {}) {
+    await this.#getActiveMembership(currentUserId, organizationId);
 
-    const { status, page = 1, limit = 10 } = filters;
+    const {
+      status,
+      membershipId,
+      contributionPlanId,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10,
+    } = filters;
+
     const skip = (page - 1) * limit;
 
     const where = {
       organizationId,
-      membershipId: membership.id,
       ...(status && { status }),
+      ...(membershipId && { membershipId }),
+      ...(contributionPlanId && { contributionPlanId }),
+      ...(startDate || endDate
+        ? {
+            dueDate: {
+              ...(startDate && { gte: new Date(startDate) }),
+              ...(endDate && { lte: new Date(endDate) }),
+            },
+          }
+        : {}),
     };
 
-    const [contributions, total, totals] = await Promise.all([
+    const [data, total] = await Promise.all([
       prisma.contribution.findMany({
         where,
+        skip,
+        take: limit,
+        orderBy: { dueDate: "asc" },
         include: {
-          contributionPlan: {
-            select: {
-              id: true,
-              name: true,
-              amount: true,
-              frequency: true,
+          membership: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  prenom: true,
+                  nom: true,
+                  email: true,
+                  phone: true,
+                },
+              },
+            },
+          },
+          contributionPlan: true,
+          partialPayments: { orderBy: { paymentDate: "desc" } },
+          transaction: {
+            include: {
+              wallet: {
+                // ✅ AJOUT : Wallet lié
+                select: {
+                  currentBalance: true,
+                  currency: true,
+                },
+              },
             },
           },
         },
-        skip,
-        take: limit,
-        orderBy: { dueDate: "desc" },
       }),
       prisma.contribution.count({ where }),
-      prisma.contribution.aggregate({
-        where,
-        _sum: { amount: true, amountPaid: true },
-      }),
     ]);
 
     return {
-      contributions: contributions.map((c) => ({
+      contributions: data.map((c) => ({
         ...c,
-        remainingAmount: c.amount - c.amountPaid,
+        remainingAmount: this.#remaining(c),
       })),
-      totals: {
-        totalAmount: totals._sum.amount || 0,
-        totalPaid: totals._sum.amountPaid || 0,
-        totalRemaining:
-          (totals._sum.amount || 0) - (totals._sum.amountPaid || 0),
-      },
       pagination: {
         page,
         limit,
@@ -479,5 +589,79 @@ export default class ContributionService {
     } catch (error) {
       console.error("Notification error:", error);
     }
+  }
+
+  /* ======================================================
+   ❌ ANNULER UNE COTISATION
+====================================================== */
+
+  async cancelContribution(
+    organizationId,
+    contributionId,
+    currentUserId,
+    reason = "",
+  ) {
+    const currentMembership = await this.#getActiveMembership(
+      currentUserId,
+      organizationId,
+      ["ADMIN"],
+    );
+
+    const contribution = await this.#getContributionOrFail(
+      contributionId,
+      organizationId,
+      { contributionPlan: true },
+    );
+
+    if (contribution.status === "CANCELLED") {
+      throw new Error("Cotisation déjà annulée");
+    }
+
+    return await prisma.$transaction(async (tx) => {
+      // Si déjà payée partiellement ou totalement, ajuster le wallet
+      if (contribution.amountPaid > 0) {
+        const wallet = await tx.organizationWallet.findUnique({
+          where: { organizationId },
+        });
+
+        if (wallet) {
+          await tx.organizationWallet.update({
+            where: { id: wallet.id },
+            data: {
+              currentBalance: { decrement: contribution.amountPaid },
+              totalIncome: { decrement: contribution.amountPaid },
+            },
+          });
+        }
+      }
+
+      // Annuler la cotisation
+      const cancelledContribution = await tx.contribution.update({
+        where: { id: contributionId },
+        data: {
+          status: "CANCELLED",
+        },
+      });
+
+      // Audit log
+      await tx.auditLog.create({
+        data: {
+          action: "CANCEL_CONTRIBUTION",
+          resource: "contribution",
+          resourceId: contributionId,
+          userId: currentUserId,
+          organizationId,
+          membershipId: currentMembership.id,
+          financialImpact: -contribution.amountPaid,
+          details: {
+            reason,
+            amountPaid: contribution.amountPaid,
+            walletAdjusted: contribution.amountPaid > 0,
+          },
+        },
+      });
+
+      return cancelledContribution;
+    });
   }
 }

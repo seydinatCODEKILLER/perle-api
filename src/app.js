@@ -8,10 +8,12 @@ import {
   contributionRoute,
   dashboardRoute,
   debtRoute,
+  expenseRoute,
   membershipRoute,
   organisationRoute,
   subscriptionRoute,
   transactionRoute,
+  walletRoute,
 } from "./utils/Router.js";
 import swaggerJSDoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
@@ -44,6 +46,8 @@ app.use("/api/debts", debtRoute.routes);
 app.use("/api/transactions", transactionRoute.routes);
 app.use("/api/subscriptions", subscriptionRoute.routes);
 app.use("/api/statistiques", dashboardRoute.routes);
+app.use("/api/wallet", walletRoute.routes);
+app.use("/api/expenses", expenseRoute.routes)
 
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(specs));
 

@@ -12,6 +12,160 @@ datasource db {
 }
 
 // ======================================================
+//  ENUMS
+// ======================================================
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  MEMBER
+}
+
+enum OrganizationType {
+  DAHIRA
+  ASSOCIATION
+  TONTINE
+  GROUPEMENT
+}
+
+enum MembershipRole {
+  ADMIN
+  FINANCIAL_MANAGER
+  MEMBER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum ContributionFrequency {
+  WEEKLY
+  MONTHLY
+  QUARTERLY
+  YEARLY
+  CUSTOM
+}
+
+enum ContributionStatus {
+  PENDING
+  PAID
+  PARTIAL
+  OVERDUE
+  CANCELLED
+}
+
+enum DebtStatus {
+  ACTIVE
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum TransactionType {
+  CONTRIBUTION
+  DEBT_REPAYMENT
+  FINE
+  DONATION
+  EXPENSE
+  OTHER
+}
+
+enum IncomeType {
+  CONTRIBUTION
+  DONATION
+  LOAN_REPAYMENT
+  FINE
+  INTEREST
+  OTHER
+}
+
+enum ExpenseCategory {
+  EVENT
+  SOCIAL
+  ADMINISTRATIVE
+  MAINTENANCE
+  DONATION
+  INVESTMENT
+  OPERATIONAL
+  OTHER
+}
+
+enum ExpenseStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PAID
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  MOBILE_MONEY
+  BANK_TRANSFER
+  CHECK
+  CREDIT_CARD
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum NotificationType {
+  CONTRIBUTION_REMINDER
+  DEBT_REMINDER
+  PAYMENT_CONFIRMATION
+  MEMBERSHIP_UPDATE
+  SYSTEM_ALERT
+}
+
+enum NotificationPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  DELIVERED
+}
+
+enum NotificationChannel {
+  EMAIL
+  SMS
+  WHATSAPP
+  IN_APP
+}
+
+enum SubscriptionPlan {
+  FREE
+  BASIC
+  PREMIUM
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+  CANCELLED
+  EXPIRED
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+// ======================================================
 //  USERS — Compte global (plateforme)
 // ======================================================
 
@@ -25,26 +179,24 @@ model User {
   avatar        String?
   role          UserRole    @default(MEMBER)
   isActive      Boolean     @default(true)
-  // Self-Service
   canCreateOrganization Boolean @default(true)
-
-  // ⚠️ loginCode supprimé
-  // Identifiant unique maintenant géré dans Membership
 
   memberships   Membership[]
   organizations Organization[] @relation("OwnedOrganizations")
   auditLogs     AuditLog[]
-
+  refreshTokens RefreshToken[]
 
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   lastLoginAt   DateTime?
 
   @@map("users")
-  refreshTokens RefreshToken[]
 }
 
-// Ajouter après le modèle User dans votre schéma Prisma
+// ======================================================
+//  REFRESH TOKENS
+// ======================================================
+
 model RefreshToken {
   id           String   @id @default(auto()) @map("_id") @db.ObjectId
   token        String   @unique
@@ -69,7 +221,7 @@ model Organization {
   type          OrganizationType
   logo          String?
   currency      String      @default("XOF")
-  memberCounter     Int     @default(0)
+  memberCounter Int         @default(0)
 
   ownerId       String      @db.ObjectId
   owner         User        @relation("OwnedOrganizations", fields: [ownerId], references: [id])
@@ -83,13 +235,15 @@ model Organization {
 
   isActive      Boolean     @default(true)
 
+  // Relations
   subscription  Subscription?
-
+  wallet        OrganizationWallet?
   members       Membership[]
   contributionPlans ContributionPlan[]
   contributions Contribution[]
   debts         Debt[]
   transactions  Transaction[]
+  expenses      Expense[]
   notifications Notification[]
   auditLogs     AuditLog[]
 
@@ -123,7 +277,6 @@ model OrganizationSettings {
 
 // ======================================================
 //  MEMBERSHIP — User <-> Organization
-//  ❗ loginId ajouté ici (nouvelle logique)
 // ======================================================
 
 model Membership {
@@ -132,14 +285,12 @@ model Membership {
   organizationId String         @db.ObjectId
 
   role           MembershipRole @default(MEMBER)
-
-  // Nouveau login unique
   loginId        String         @unique
-
   memberNumber   String?
-  joinDate       DateTime        @default(now())
+  joinDate       DateTime       @default(now())
   status         MembershipStatus @default(ACTIVE)
 
+  // Relations
   user           User         @relation(fields: [userId], references: [id])
   organization   Organization @relation(fields: [organizationId], references: [id])
 
@@ -149,6 +300,9 @@ model Membership {
   transactions   Transaction[]
   notifications  Notification[]
   auditLogs      AuditLog[]
+  expenseAttachments ExpenseAttachment[]
+  createdExpenses Expense[] @relation("CreatedExpenses")
+  approvedExpenses Expense[] @relation("ApprovedExpenses")
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -159,7 +313,7 @@ model Membership {
 }
 
 // ======================================================
-//  MEMBER PROFILE — informations avancées
+//  MEMBER PROFILE
 // ======================================================
 
 model MemberProfile {
@@ -173,10 +327,8 @@ model MemberProfile {
   gender       Gender?
   profession   String?
   emergencyContact String?
-
   address      String?
   city         String?
-
   idNumber     String?
   idType       String?
 
@@ -225,8 +377,6 @@ model Contribution {
   dueDate             DateTime
   status              ContributionStatus @default(PENDING)
   paymentMethod       PaymentMethod?
-  
-  // Retirer @unique
   transactionId       String?           @db.ObjectId
   
   membership          Membership        @relation(fields: [membershipId], references: [id])
@@ -235,9 +385,12 @@ model Contribution {
   transaction         Transaction?      @relation(fields: [transactionId], references: [id])
   
   partialPayments     PartialPayment[]
+  
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
+  @@index([organizationId, createdAt])
+  @@index([membershipId, createdAt])
   @@map("contributions")
 }
 
@@ -295,12 +448,12 @@ model Repayment {
 
   debtId         String     @db.ObjectId
   amount         Float
-  paymentDate    DateTime    @default(now())
+  paymentDate    DateTime   @default(now())
   paymentMethod  PaymentMethod?
 
-  transactionId  String?     @unique @db.ObjectId
+  transactionId  String?    @unique @db.ObjectId
 
-  debt           Debt         @relation(fields: [debtId], references: [id])
+  debt           Debt       @relation(fields: [debtId], references: [id])
   transaction    Transaction? @relation(fields: [transactionId], references: [id])
 
   @@map("repayments")
@@ -318,24 +471,121 @@ model Transaction {
 
   type           TransactionType
   amount         Float
-  currency       String @default("XOF")
+  currency       String     @default("XOF")
   description    String?
 
   paymentMethod  PaymentMethod
   paymentStatus  PaymentStatus @default(COMPLETED)
-  reference      String? @unique
+  reference      String?    @unique
 
   metadata       Json?
 
   organization   Organization @relation(fields: [organizationId], references: [id])
   membership     Membership?  @relation(fields: [membershipId], references: [id])
+  walletId       String?    @db.ObjectId
+  wallet   OrganizationWallet? @relation(fields: [walletId], references: [id])
   contributions  Contribution[]
   repayment      Repayment?
+  expense        Expense?
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  @@index([organizationId, createdAt])
+  @@index([membershipId, createdAt])
   @@map("transactions")
+}
+
+// ======================================================
+//  ORGANIZATION WALLET
+// ======================================================
+
+model OrganizationWallet {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+
+  organizationId  String   @unique @db.ObjectId
+  organization    Organization @relation(fields: [organizationId], references: [id])
+
+  initialBalance  Float    @default(0)
+  currentBalance  Float    @default(0)
+  currency        String   @default("XOF")
+
+  totalIncome     Float    @default(0)
+  totalExpenses   Float    @default(0)
+  lastUpdated     DateTime @updatedAt
+
+  expenses        Expense[]
+  transactions    Transaction[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("organization_wallets")
+}
+
+// ======================================================
+//  EXPENSE
+// ======================================================
+
+model Expense {
+  id              String          @id @default(auto()) @map("_id") @db.ObjectId
+
+  organizationId  String          @db.ObjectId
+  walletId        String          @db.ObjectId
+  createdById     String          @db.ObjectId
+  transactionId   String?         @unique @db.ObjectId
+  approvedById    String?         @db.ObjectId
+
+  title           String
+  description     String?
+  amount          Float
+  currency        String          @default("XOF")
+  category        ExpenseCategory
+  status          ExpenseStatus   @default(PENDING)
+
+  expenseDate     DateTime        @default(now())
+  approvedAt      DateTime?
+
+  organization    Organization    @relation(fields: [organizationId], references: [id])
+  wallet          OrganizationWallet @relation(fields: [walletId], references: [id])
+  createdBy       Membership      @relation("CreatedExpenses", fields: [createdById], references: [id])
+  approvedBy      Membership?     @relation("ApprovedExpenses", fields: [approvedById], references: [id])
+  transaction     Transaction?    @relation(fields: [transactionId], references: [id])
+  
+  attachments     ExpenseAttachment[]
+
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([walletId])
+  @@index([category])
+  @@index([status])
+  @@index([organizationId, createdAt])
+  @@index([expenseDate])
+  @@map("expenses")
+}
+
+// ======================================================
+//  EXPENSE ATTACHMENT
+// ======================================================
+
+model ExpenseAttachment {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  expenseId       String   @db.ObjectId
+  
+  fileName        String
+  fileUrl         String
+  fileType        String
+  fileSize        Int?
+  
+  uploadedById    String   @db.ObjectId
+  uploadedBy      Membership @relation(fields: [uploadedById], references: [id])
+  expense         Expense  @relation(fields: [expenseId], references: [id])
+  
+  createdAt       DateTime @default(now())
+  
+  @@index([expenseId])
+  @@map("expense_attachments")
 }
 
 // ======================================================
@@ -411,137 +661,20 @@ model AuditLog {
   ipAddress      String?
   userAgent      String?
 
+  // Traçabilité financière
+  financialImpact  Float?
+  previousBalance  Float?
+  newBalance       Float?
+
   organization   Organization? @relation(fields: [organizationId], references: [id])
   user           User          @relation(fields: [userId], references: [id])
   membership     Membership?   @relation(fields: [membershipId], references: [id])
 
   createdAt      DateTime @default(now())
 
+  @@index([organizationId])
+  @@index([userId])
+  @@index([membershipId])
+  @@index([resource])
   @@map("audit_logs")
-}
-
-// ======================================================
-// ENUMS
-// ======================================================
-
-enum UserRole {
-  SUPER_ADMIN
-  ADMIN
-  MEMBER
-}
-
-enum OrganizationType {
-  DAHIRA
-  ASSOCIATION
-  TONTINE
-  GROUPEMENT
-}
-
-enum MembershipRole {
-  ADMIN
-  FINANCIAL_MANAGER
-  MEMBER
-}
-
-enum MembershipStatus {
-  ACTIVE
-  INACTIVE
-  SUSPENDED
-}
-
-enum ContributionFrequency {
-  WEEKLY
-  MONTHLY
-  QUARTERLY
-  YEARLY
-  CUSTOM
-}
-
-enum ContributionStatus {
-  PENDING
-  PAID
-  PARTIAL
-  OVERDUE
-  CANCELLED
-}
-
-enum DebtStatus {
-  ACTIVE
-  PARTIALLY_PAID
-  PAID
-  OVERDUE
-  CANCELLED
-}
-
-enum TransactionType {
-  CONTRIBUTION
-  DEBT_REPAYMENT
-  FINE
-  DONATION
-  EXPENSE
-  OTHER
-}
-
-enum PaymentMethod {
-  CASH
-  MOBILE_MONEY
-  BANK_TRANSFER
-  CHECK
-  CREDIT_CARD
-}
-
-enum PaymentStatus {
-  PENDING
-  COMPLETED
-  FAILED
-  REFUNDED
-}
-
-enum NotificationType {
-  CONTRIBUTION_REMINDER
-  DEBT_REMINDER
-  PAYMENT_CONFIRMATION
-  MEMBERSHIP_UPDATE
-  SYSTEM_ALERT
-}
-
-enum NotificationPriority {
-  LOW
-  MEDIUM
-  HIGH
-  URGENT
-}
-
-enum NotificationStatus {
-  PENDING
-  SENT
-  FAILED
-  DELIVERED
-}
-
-enum NotificationChannel {
-  EMAIL
-  SMS
-  WHATSAPP
-  IN_APP
-}
-
-enum SubscriptionPlan {
-  FREE
-  BASIC
-  PREMIUM
-  ENTERPRISE
-}
-
-enum SubscriptionStatus {
-  ACTIVE
-  INACTIVE
-  SUSPENDED
-  CANCELLED
-  EXPIRED
-}
-
-enum Gender {
-  MALE
-  FEMALE
 }

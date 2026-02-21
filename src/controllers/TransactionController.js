@@ -9,16 +9,16 @@ export default class TransactionController {
     try {
       const { organizationId } = req.params;
       const userId = req.user.id;
-      const { 
-        type, 
-        paymentMethod, 
+      const {
+        type,
+        paymentMethod,
         paymentStatus,
         membershipId,
-        startDate, 
+        startDate,
         endDate,
         search,
-        page, 
-        limit 
+        page,
+        limit,
       } = req.query;
 
       const result = await this.service.getTransactions(
@@ -34,7 +34,7 @@ export default class TransactionController {
           search,
           page: parseInt(page) || 1,
           limit: parseInt(limit) || 10,
-        }
+        },
       );
 
       return res.success(result, "Transactions récupérées avec succès");
@@ -51,7 +51,7 @@ export default class TransactionController {
       const transaction = await this.service.getTransactionById(
         organizationId,
         id,
-        userId
+        userId,
       );
 
       return res.success(transaction, "Transaction récupérée avec succès");
@@ -74,7 +74,7 @@ export default class TransactionController {
       const result = await this.service.searchTransactions(
         organizationId,
         userId,
-        q
+        q,
       );
 
       return res.success(result, "Recherche effectuée avec succès");
@@ -87,14 +87,14 @@ export default class TransactionController {
     try {
       const { organizationId, membershipId } = req.params;
       const userId = req.user.id;
-      const { 
-        type, 
-        paymentMethod, 
+      const {
+        type,
+        paymentMethod,
         paymentStatus,
-        startDate, 
+        startDate,
         endDate,
-        page, 
-        limit 
+        page,
+        limit,
       } = req.query;
 
       const result = await this.service.getMemberTransactions(
@@ -109,10 +109,59 @@ export default class TransactionController {
           endDate,
           page: parseInt(page) || 1,
           limit: parseInt(limit) || 10,
-        }
+        },
       );
 
-      return res.success(result, "Transactions du membre récupérées avec succès");
+      return res.success(
+        result,
+        "Transactions du membre récupérées avec succès",
+      );
+    } catch (error) {
+      return res.error(error.message, 400);
+    }
+  }
+
+  async verifyWalletIntegrity(req, res) {
+    try {
+      const { organizationId } = req.params;
+      const userId = req.user.id;
+
+      const result = await this.service.verifyWalletIntegrity(
+        organizationId,
+        userId,
+      );
+
+      const message = result.isConsistent
+        ? "Le wallet est cohérent avec les transactions"
+        : `Incohérence détectée : écart de ${result.discrepancy.toFixed(2)}`;
+
+      return res.success(result, message);
+    } catch (error) {
+      const statusCode = error.message.includes("administrateur")
+        ? 403
+        : error.message.includes("non trouvé")
+          ? 404
+          : 400;
+      return res.error(error.message, statusCode);
+    }
+  }
+
+  async getTransactionStatsByType(req, res) {
+    try {
+      const { organizationId } = req.params;
+      const userId = req.user.id;
+      const { startDate, endDate } = req.query;
+
+      const result = await this.service.getTransactionStatsByType(
+        organizationId,
+        userId,
+        { startDate, endDate },
+      );
+
+      return res.success(
+        result,
+        "Statistiques par type récupérées avec succès",
+      );
     } catch (error) {
       return res.error(error.message, 400);
     }

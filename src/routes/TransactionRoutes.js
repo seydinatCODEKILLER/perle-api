@@ -77,7 +77,7 @@ export default class TransactionRoutes {
      *         description: Liste des transactions
      */
     this.router.get("/:organizationId", (req, res) =>
-      this.controller.getTransactions(req, res)
+      this.controller.getTransactions(req, res),
     );
 
     /**
@@ -104,7 +104,7 @@ export default class TransactionRoutes {
      *         description: Résultats de la recherche
      */
     this.router.get("/:organizationId/search", (req, res) =>
-      this.controller.searchTransactions(req, res)
+      this.controller.searchTransactions(req, res),
     );
 
     /**
@@ -131,7 +131,7 @@ export default class TransactionRoutes {
      *         description: Détails de la transaction
      */
     this.router.get("/:organizationId/transaction/:id", (req, res) =>
-      this.controller.getTransaction(req, res)
+      this.controller.getTransaction(req, res),
     );
 
     /**
@@ -193,7 +193,128 @@ export default class TransactionRoutes {
      *         description: Transactions du membre
      */
     this.router.get("/:organizationId/members/:membershipId", (req, res) =>
-      this.controller.getMemberTransactions(req, res)
+      this.controller.getMemberTransactions(req, res),
+    );
+
+    /**
+     * @swagger
+     * ✅ NOUVELLE ROUTE : Vérifier la cohérence du wallet
+     * /api/transactions/{organizationId}/verify-integrity:
+     *   get:
+     *     summary: Vérifier la cohérence entre le wallet et les transactions
+     *     tags: [Transactions]
+     *     security:
+     *       - bearerAuth: []
+     *     parameters:
+     *       - in: path
+     *         name: organizationId
+     *         required: true
+     *         schema:
+     *           type: string
+     *     responses:
+     *       200:
+     *         description: Résultat de la vérification de cohérence
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 wallet:
+     *                   type: object
+     *                   properties:
+     *                     currentBalance:
+     *                       type: number
+     *                     totalIncome:
+     *                       type: number
+     *                     totalExpenses:
+     *                       type: number
+     *                 calculated:
+     *                   type: object
+     *                   properties:
+     *                     income:
+     *                       type: number
+     *                     expenses:
+     *                       type: number
+     *                     balance:
+     *                       type: number
+     *                 isConsistent:
+     *                   type: boolean
+     *                 discrepancy:
+     *                   type: number
+     *       403:
+     *         description: Accès réservé aux administrateurs
+     *       404:
+     *         description: Wallet non trouvé
+     */
+    this.router.get("/:organizationId/verify-integrity", (req, res) =>
+      this.controller.verifyWalletIntegrity(req, res),
+    );
+
+    /**
+     * @swagger
+     * 📊 NOUVELLE ROUTE : Statistiques par type de transaction
+     * /api/transactions/{organizationId}/stats-by-type:
+     *   get:
+     *     summary: Obtenir les statistiques groupées par type de transaction
+     *     tags: [Transactions]
+     *     security:
+     *       - bearerAuth: []
+     *     parameters:
+     *       - in: path
+     *         name: organizationId
+     *         required: true
+     *         schema:
+     *           type: string
+     *       - in: query
+     *         name: startDate
+     *         schema:
+     *           type: string
+     *           format: date
+     *           description: Date de début pour le filtrage
+     *       - in: query
+     *         name: endDate
+     *         schema:
+     *           type: string
+     *           format: date
+     *           description: Date de fin pour le filtrage
+     *     responses:
+     *       200:
+     *         description: Statistiques par type
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 wallet:
+     *                   type: object
+     *                   properties:
+     *                     currentBalance:
+     *                       type: number
+     *                     totalIncome:
+     *                       type: number
+     *                     totalExpenses:
+     *                       type: number
+     *                 byType:
+     *                   type: array
+     *                   items:
+     *                     type: object
+     *                     properties:
+     *                       type:
+     *                         type: string
+     *                       totalAmount:
+     *                         type: number
+     *                       count:
+     *                         type: integer
+     *                 summary:
+     *                   type: object
+     *                   properties:
+     *                     totalTransactions:
+     *                       type: integer
+     *                     totalAmount:
+     *                       type: number
+     */
+    this.router.get("/:organizationId/stats-by-type", (req, res) =>
+      this.controller.getTransactionStatsByType(req, res),
     );
   }
 

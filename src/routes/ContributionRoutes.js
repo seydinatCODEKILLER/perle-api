@@ -67,7 +67,7 @@ export default class ContributionRoutes {
      *         description: Liste des cotisations
      */
     this.router.get("/:organizationId", (req, res) =>
-      this.controller.getContributions(req, res)
+      this.controller.getContributions(req, res),
     );
 
     /**
@@ -94,7 +94,7 @@ export default class ContributionRoutes {
      *         description: Détails de la cotisation
      */
     this.router.get("/:organizationId/contribution/:id", (req, res) =>
-      this.controller.getContribution(req, res)
+      this.controller.getContribution(req, res),
     );
 
     /**
@@ -135,8 +135,9 @@ export default class ContributionRoutes {
      *       200:
      *         description: Cotisation marquée comme payée
      */
-    this.router.patch("/:organizationId/contribution/:id/mark-paid", (req, res) =>
-      this.controller.markAsPaid(req, res)
+    this.router.patch(
+      "/:organizationId/contribution/:id/mark-paid",
+      (req, res) => this.controller.markAsPaid(req, res),
     );
 
     /**
@@ -177,8 +178,9 @@ export default class ContributionRoutes {
      *       200:
      *         description: Paiement partiel ajouté
      */
-    this.router.post("/:organizationId/contribution/:id/partial-payment", (req, res) =>
-      this.controller.addPartialPayment(req, res)
+    this.router.post(
+      "/:organizationId/contribution/:id/partial-payment",
+      (req, res) => this.controller.addPartialPayment(req, res),
     );
 
     /**
@@ -219,8 +221,9 @@ export default class ContributionRoutes {
      *       200:
      *         description: Cotisations du membre
      */
-    this.router.get("/:organizationId/members/:membershipId/contributions", (req, res) =>
-      this.controller.getMemberContributions(req, res)
+    this.router.get(
+      "/:organizationId/members/:membershipId/contributions",
+      (req, res) => this.controller.getMemberContributions(req, res),
     );
 
     /**
@@ -257,8 +260,63 @@ export default class ContributionRoutes {
      *         description: Cotisations de l'utilisateur connecté
      */
     this.router.get("/:organizationId/my-contributions", (req, res) =>
-      this.controller.getMyContributions(req, res)
-    );  
+      this.controller.getMyContributions(req, res),
+    );
+
+    /**
+     * @swagger
+     * ❌ NOUVELLE ROUTE : Annuler une cotisation
+     * /api/contributions/{organizationId}/{id}/cancel:
+     *   put:
+     *     summary: Annuler une cotisation (admin uniquement)
+     *     tags: [Contributions]
+     *     security:
+     *       - bearerAuth: []
+     *     parameters:
+     *       - in: path
+     *         name: organizationId
+     *         required: true
+     *         schema:
+     *           type: string
+     *       - in: path
+     *         name: id
+     *         required: true
+     *         schema:
+     *           type: string
+     *     requestBody:
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               reason:
+     *                 type: string
+     *                 description: Raison de l'annulation
+     *     responses:
+     *       200:
+     *         description: Cotisation annulée avec succès
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 id:
+     *                   type: string
+     *                 status:
+     *                   type: string
+     *                   example: CANCELLED
+     *                 amountPaid:
+     *                   type: number
+     *       400:
+     *         description: Cotisation déjà annulée
+     *       403:
+     *         description: Accès non autorisé (admin requis)
+     *       404:
+     *         description: Cotisation non trouvée
+     */
+    this.router.put("/:organizationId/:id/cancel", (req, res) =>
+      this.controller.cancelContribution(req, res),
+    );
   }
 
   get routes() {

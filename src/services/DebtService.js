@@ -149,7 +149,19 @@ export default class DebtService {
         },
         repayments: {
           orderBy: { paymentDate: "desc" },
-          include: { transaction: true },
+          include: {
+            transaction: {
+              include: {
+                wallet: {
+                  // ✅ AJOUT : Wallet lié aux transactions de remboursement
+                  select: {
+                    currentBalance: true,
+                    currency: true,
+                  },
+                },
+              },
+            },
+          },
         },
       },
     });
@@ -432,43 +444,62 @@ export default class DebtService {
      DEBT SUMMARY
   ========================= */
 
+  /* =========================
+   📊 DEBT SUMMARY AVEC WALLET
+========================= */
+
   async getDebtSummary(organizationId, currentUserId) {
     await this._getActiveMembership(currentUserId, organizationId);
 
-    const [totalDebts, activeDebts, overdueDebts, paidDebts, recentRepayments] =
-      await Promise.all([
-        prisma.debt.aggregate({
-          where: { organizationId },
-          _sum: { initialAmount: true },
-          _count: true,
-        }),
-        prisma.debt.aggregate({
-          where: {
-            organizationId,
-            status: { in: [DEBT_STATUS.ACTIVE, DEBT_STATUS.PARTIALLY_PAID] },
+    const [
+      totalDebts,
+      activeDebts,
+      overdueDebts,
+      paidDebts,
+      recentRepayments,
+      wallet, // ✅ AJOUT
+    ] = await Promise.all([
+      prisma.debt.aggregate({
+        where: { organizationId },
+        _sum: { initialAmount: true },
+        _count: true,
+      }),
+      prisma.debt.aggregate({
+        where: {
+          organizationId,
+          status: { in: [DEBT_STATUS.ACTIVE, DEBT_STATUS.PARTIALLY_PAID] },
+        },
+        _sum: { remainingAmount: true },
+        _count: true,
+      }),
+      prisma.debt.count({
+        where: { organizationId, status: DEBT_STATUS.OVERDUE },
+      }),
+      prisma.debt.aggregate({
+        where: { organizationId, status: DEBT_STATUS.PAID },
+        _sum: { initialAmount: true },
+        _count: true,
+      }),
+      prisma.repayment.aggregate({
+        where: {
+          debt: { organizationId },
+          paymentDate: {
+            gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
           },
-          _sum: { remainingAmount: true },
-          _count: true,
-        }),
-        prisma.debt.count({
-          where: { organizationId, status: DEBT_STATUS.OVERDUE },
-        }),
-        prisma.debt.aggregate({
-          where: { organizationId, status: DEBT_STATUS.PAID },
-          _sum: { initialAmount: true },
-          _count: true,
-        }),
-        prisma.repayment.aggregate({
-          where: {
-            debt: { organizationId },
-            paymentDate: {
-              gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
-            },
-          },
-          _sum: { amount: true },
-          _count: true,
-        }),
-      ]);
+        },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      // ✅ AJOUT : Récupérer le wallet
+      prisma.organizationWallet.findUnique({
+        where: { organizationId },
+        select: {
+          currentBalance: true,
+          totalIncome: true,
+          currency: true,
+        },
+      }),
+    ]);
 
     const totalRepaid =
       (totalDebts._sum.initialAmount || 0) -
@@ -494,6 +525,12 @@ export default class DebtService {
         overdueRate: totalDebts._count
           ? Math.round((overdueDebts / totalDebts._count) * 100)
           : 0,
+      },
+      // ✅ AJOUT : Infos du wallet
+      wallet: {
+        currentBalance: wallet?.currentBalance || 0,
+        totalIncome: wallet?.totalIncome || 0,
+        currency: wallet?.currency || "XOF",
       },
     };
   }
@@ -540,6 +577,16 @@ export default class DebtService {
         throw new Error(`Montant trop élevé. Reste: ${debt.remainingAmount}`);
       }
 
+      // ✅ AJOUT : Récupérer le wallet
+      const wallet = await tx.organizationWallet.findUnique({
+        where: { organizationId },
+      });
+
+      if (!wallet) {
+        throw new Error("Wallet non trouvé pour cette organisation");
+      }
+
+      // 1. Créer le remboursement
       const repayment = await tx.repayment.create({
         data: {
           debtId,
@@ -549,6 +596,7 @@ export default class DebtService {
         },
       });
 
+      // 2. Mettre à jour la dette
       const newRemainingAmount = debt.remainingAmount - amount;
       const newStatus = newRemainingAmount === 0 ? "PAID" : "PARTIALLY_PAID";
 
@@ -560,13 +608,15 @@ export default class DebtService {
         },
       });
 
+      // 3. Créer la transaction liée au wallet
       const transaction = await tx.transaction.create({
         data: {
           organizationId,
           membershipId: debt.membershipId,
+          walletId: wallet.id, // ✅ AJOUT : Lier au wallet
           type: "DEBT_REPAYMENT",
           amount,
-          currency: "XOF",
+          currency: wallet.currency,
           description: `Remboursement de dette: ${debt.title}`,
           paymentMethod: repaymentData.paymentMethod,
           paymentStatus: "COMPLETED",
@@ -578,14 +628,25 @@ export default class DebtService {
         },
       });
 
+      // 4. Lier la transaction au remboursement
       await tx.repayment.update({
         where: { id: repayment.id },
         data: { transactionId: transaction.id },
       });
 
+      // ✅ AJOUT : Mettre à jour le wallet
+      await tx.organizationWallet.update({
+        where: { id: wallet.id },
+        data: {
+          currentBalance: { increment: amount },
+          totalIncome: { increment: amount },
+        },
+      });
+
       return updatedDebt;
     });
 
+    // Audit log avec impact financier
     await prisma.auditLog.create({
       data: {
         action: "ADD_REPAYMENT",
@@ -594,13 +655,93 @@ export default class DebtService {
         userId: currentUserId,
         organizationId,
         membershipId: currentMembership.id,
-        details: JSON.stringify({
+        financialImpact: amount, // ✅ AJOUT : Impact financier
+        details: {
           amount,
           paymentMethod: repaymentData.paymentMethod,
-        }),
+          debtTitle: result.title,
+        },
       },
     });
 
     return result;
+  }
+
+  /* =========================
+   ❌ ANNULER UNE DETTE
+========================= */
+
+  async cancelDebt(organizationId, debtId, currentUserId, reason = "") {
+    const membership = await this._getActiveMembership(
+      currentUserId,
+      organizationId,
+      [ROLES.ADMIN],
+    );
+
+    return await prisma.$transaction(async (tx) => {
+      const debt = await tx.debt.findUnique({
+        where: { id: debtId },
+        include: {
+          repayments: true,
+        },
+      });
+
+      if (!debt || debt.organizationId !== organizationId) {
+        throw new Error("Dette introuvable");
+      }
+
+      if (debt.status === "CANCELLED") {
+        throw new Error("Dette déjà annulée");
+      }
+
+      // Calculer le montant déjà remboursé
+      const totalRepaid = debt.initialAmount - debt.remainingAmount;
+
+      // ✅ Si remboursement partiel : ajuster le wallet (retirer ce qui a été payé)
+      if (totalRepaid > 0) {
+        const wallet = await tx.organizationWallet.findUnique({
+          where: { organizationId },
+        });
+
+        if (wallet) {
+          await tx.organizationWallet.update({
+            where: { id: wallet.id },
+            data: {
+              currentBalance: { decrement: totalRepaid },
+              totalIncome: { decrement: totalRepaid },
+            },
+          });
+        }
+      }
+
+      // Mettre à jour la dette
+      const cancelledDebt = await tx.debt.update({
+        where: { id: debtId },
+        data: {
+          status: "CANCELLED",
+          remainingAmount: 0,
+        },
+      });
+
+      // Audit log
+      await tx.auditLog.create({
+        data: {
+          action: "CANCEL_DEBT",
+          resource: "debt",
+          resourceId: debtId,
+          userId: currentUserId,
+          organizationId,
+          membershipId: membership.id,
+          financialImpact: -totalRepaid, // ✅ Impact négatif
+          details: {
+            reason,
+            amountRepaid: totalRepaid,
+            walletAdjusted: totalRepaid > 0,
+          },
+        },
+      });
+
+      return cancelledDebt;
+    });
   }
 }

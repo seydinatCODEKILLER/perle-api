@@ -154,4 +154,31 @@ export default class ContributionController {
       return res.error(error.message, 400);
     }
   }
+
+  async cancelContribution(req, res) {
+    try {
+      const { organizationId, id } = req.params;
+      const userId = req.user.id;
+      const { reason } = req.body;
+
+      const contribution = await this.service.cancelContribution(
+        organizationId,
+        id,
+        userId,
+        reason || "",
+      );
+
+      const message = contribution.amountPaid > 0
+        ? `Cotisation annulée. ${contribution.amountPaid} retiré(s) du wallet.`
+        : "Cotisation annulée avec succès";
+
+      return res.success(contribution, message);
+    } catch (error) {
+      const statusCode = error.message.includes("non autorisé") ? 403 
+        : error.message.includes("introuvable") ? 404 
+        : error.message.includes("déjà annulée") ? 400 
+        : 400;
+      return res.error(error.message, statusCode);
+    }
+  }
 }

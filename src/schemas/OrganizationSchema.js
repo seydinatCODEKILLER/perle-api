@@ -18,13 +18,22 @@ export default class OrganizationSchema {
       country: z.string().default("Sénégal"),
       settings: z
         .object({
-          allowPartialPayments: z.boolean().default(false),
+          allowPartialPayments: z.boolean().default(true),
           autoReminders: z.boolean().default(true),
           reminderDays: z.array(z.number()).default([1, 3, 7]),
           emailNotifications: z.boolean().default(true),
           smsNotifications: z.boolean().default(false),
           whatsappNotifications: z.boolean().default(false),
           sessionTimeout: z.number().default(60),
+        })
+        .optional(),
+      // ✅ NOUVEAU : Validation du wallet
+      wallet: z
+        .object({
+          initialBalance: z
+            .number()
+            .nonnegative({ message: "Le solde initial doit être positif ou nul" })
+            .default(0),
         })
         .optional(),
     });

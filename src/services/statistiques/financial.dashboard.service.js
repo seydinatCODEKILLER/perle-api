@@ -9,49 +9,40 @@ export default class FinancialDashboardService {
       pendingContributions,
       activeDebts,
       overdueContributions,
+      walletOverview, // ✅ NOUVEAU
+      expensesOverview, // ✅ NOUVEAU
       todayRevenue,
       weekRevenue,
+      todayExpenses, // ✅ NOUVEAU
+      weekExpenses, // ✅ NOUVEAU
       remainingToCollect,
       debtsToRecover,
+      pendingExpenses, // ✅ NOUVEAU
       recentPayments,
       recentRepayments,
+      recentExpenses, // ✅ NOUVEAU
       revenueTrend,
+      expenseTrend, // ✅ NOUVEAU
       debtsVsPaid,
     ] = await Promise.all([
-      // 💰 Total collecté
       this.#getTotalCollected(organizationId),
-
-      // ⏳ Cotisations en attente
       this.#getPendingContributions(organizationId),
-
-      // ⚠️ Dettes actives
       this.#getActiveDebts(organizationId),
-
-      // 📅 Cotisations en retard
       this.#getOverdueContributions(organizationId),
-
-      // 💵 Montant encaissé aujourd'hui
+      this.#getWalletOverview(organizationId), // ✅ NOUVEAU
+      this.#getExpensesOverview(organizationId), // ✅ NOUVEAU
       this.#getTodayRevenue(organizationId),
-
-      // 💵 Montant encaissé cette semaine
       this.#getWeekRevenue(organizationId),
-
-      // 💵 Montant restant à collecter
+      this.#getTodayExpenses(organizationId), // ✅ NOUVEAU
+      this.#getWeekExpenses(organizationId), // ✅ NOUVEAU
       this.#getRemainingToCollect(organizationId),
-
-      // 💵 Dettes à recouvrer
       this.#getDebtsToRecover(organizationId),
-
-      // 💵 Derniers paiements
+      this.#getPendingExpenses(organizationId), // ✅ NOUVEAU
       this.#getRecentPayments(organizationId),
-
-      // 💵 Remboursements récents
       this.#getRecentRepayments(organizationId),
-
-      // 📈 Encaissements par période
+      this.#getRecentExpenses(organizationId), // ✅ NOUVEAU
       this.#getRevenueTrend(organizationId),
-
-      // 📊 Dettes actives vs soldées
+      this.#getExpenseTrend(organizationId), // ✅ NOUVEAU
       this.#getDebtsVsPaid(organizationId),
     ]);
 
@@ -68,37 +59,278 @@ export default class FinancialDashboardService {
         overdueContributions,
       },
 
-      // 2️⃣ Focus exécution
+      // 2️⃣ Vue financière (Wallet + Expenses)
+      financialOverview: {
+        wallet: walletOverview, // ✅ NOUVEAU
+        expenses: expensesOverview, // ✅ NOUVEAU
+      },
+
+      // 3️⃣ Focus exécution
       executionFocus: {
         todayRevenue,
         weekRevenue,
+        todayExpenses, // ✅ NOUVEAU
+        weekExpenses, // ✅ NOUVEAU
         remainingToCollect,
         debtsToRecover,
+        pendingExpenses, // ✅ NOUVEAU
       },
 
-      // 3️⃣ Activités récentes
+      // 4️⃣ Activités récentes
       recentActivities: {
         payments: recentPayments,
         repayments: recentRepayments,
+        expenses: recentExpenses, // ✅ NOUVEAU
       },
 
-      // 4️⃣ Graphiques opérationnels
+      // 5️⃣ Graphiques opérationnels
       charts: {
         revenueTrend,
+        expenseTrend, // ✅ NOUVEAU
         debtsVsPaid,
       },
 
-      // 5️⃣ Indicateurs de performance
+      // 6️⃣ Indicateurs de performance
       performance: {
         collectionRate: await this.#getCollectionRate(organizationId),
         debtRecoveryRate: await this.#getDebtRecoveryRate(organizationId),
         averagePaymentTime: await this.#getAveragePaymentTime(organizationId),
+        expenseControlRate: await this.#getExpenseControlRate(organizationId), // ✅ NOUVEAU
       },
     };
   }
 
   // ======================================================
-  // MÉTHODES PRIVÉES
+  // ✅ NOUVELLES MÉTHODES WALLET
+  // ======================================================
+
+  async #getWalletOverview(organizationId) {
+    const wallet = await prisma.organizationWallet.findUnique({
+      where: { organizationId },
+    });
+
+    if (!wallet) {
+      return {
+        exists: false,
+        currentBalance: 0,
+        totalIncome: 0,
+        totalExpenses: 0,
+        currency: "XOF",
+      };
+    }
+
+    return {
+      exists: true,
+      id: wallet.id,
+      currentBalance: wallet.currentBalance,
+      totalIncome: wallet.totalIncome,
+      totalExpenses: wallet.totalExpenses,
+      currency: wallet.currency,
+      lastUpdated: wallet.lastUpdated,
+      netBalance: wallet.totalIncome - wallet.totalExpenses,
+      healthStatus: this.#getWalletHealthStatus(
+        wallet.currentBalance,
+        wallet.totalIncome
+      ),
+    };
+  }
+
+  #getWalletHealthStatus(currentBalance, totalIncome) {
+    if (totalIncome === 0) return "UNKNOWN";
+    const ratio = (currentBalance / totalIncome) * 100;
+    if (ratio >= 50) return "HEALTHY";
+    if (ratio >= 25) return "WARNING";
+    return "CRITICAL";
+  }
+
+  // ======================================================
+  // ✅ NOUVELLES MÉTHODES EXPENSES
+  // ======================================================
+
+  async #getExpensesOverview(organizationId) {
+    const [pending, approved, paid, rejected] = await Promise.all([
+      prisma.expense.aggregate({
+        where: { organizationId, status: "PENDING" },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      prisma.expense.aggregate({
+        where: { organizationId, status: "APPROVED" },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      prisma.expense.aggregate({
+        where: { organizationId, status: "PAID" },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      prisma.expense.aggregate({
+        where: { organizationId, status: "REJECTED" },
+        _sum: { amount: true },
+        _count: true,
+      }),
+    ]);
+
+    return {
+      pending: { count: pending._count, amount: pending._sum.amount || 0 },
+      approved: { count: approved._count, amount: approved._sum.amount || 0 },
+      paid: { count: paid._count, amount: paid._sum.amount || 0 },
+      rejected: { count: rejected._count, amount: rejected._sum.amount || 0 },
+      totalPaid: paid._sum.amount || 0,
+    };
+  }
+
+  async #getTodayExpenses(organizationId) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const result = await prisma.expense.aggregate({
+      where: {
+        organizationId,
+        status: "PAID",
+        expenseDate: { gte: today, lt: tomorrow },
+      },
+      _sum: { amount: true },
+      _count: true,
+    });
+
+    return {
+      amount: result._sum.amount || 0,
+      count: result._count,
+      date: today,
+    };
+  }
+
+  async #getWeekExpenses(organizationId) {
+    const today = new Date();
+    const weekAgo = new Date(today);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+
+    const result = await prisma.expense.aggregate({
+      where: {
+        organizationId,
+        status: "PAID",
+        expenseDate: { gte: weekAgo, lte: today },
+      },
+      _sum: { amount: true },
+      _count: true,
+    });
+
+    return {
+      amount: result._sum.amount || 0,
+      count: result._count,
+      period: { from: weekAgo, to: today },
+    };
+  }
+
+  async #getPendingExpenses(organizationId) {
+    const [pending, approved] = await Promise.all([
+      prisma.expense.aggregate({
+        where: { organizationId, status: "PENDING" },
+        _sum: { amount: true },
+        _count: true,
+      }),
+      prisma.expense.aggregate({
+        where: { organizationId, status: "APPROVED" },
+        _sum: { amount: true },
+        _count: true,
+      }),
+    ]);
+
+    return {
+      pending: {
+        count: pending._count,
+        amount: pending._sum.amount || 0,
+      },
+      approved: {
+        count: approved._count,
+        amount: approved._sum.amount || 0,
+      },
+      total: {
+        count: pending._count + approved._count,
+        amount: (pending._sum.amount || 0) + (approved._sum.amount || 0),
+      },
+    };
+  }
+
+  async #getRecentExpenses(organizationId, limit = 10) {
+    return await prisma.expense.findMany({
+      where: { organizationId },
+      include: {
+        createdBy: {
+          include: {
+            user: { select: { prenom: true, nom: true } },
+          },
+        },
+        approvedBy: {
+          include: {
+            user: { select: { prenom: true, nom: true } },
+          },
+        },
+        transaction: true,
+      },
+      orderBy: { createdAt: "desc" },
+      take: limit,
+    });
+  }
+
+  async #getExpenseTrend(organizationId, periods = 4) {
+    const trends = [];
+    const today = new Date();
+
+    for (let i = 0; i < periods; i++) {
+      const periodEnd = new Date(today);
+      periodEnd.setDate(periodEnd.getDate() - i * 7);
+      const periodStart = new Date(periodEnd);
+      periodStart.setDate(periodStart.getDate() - 7);
+
+      const result = await prisma.expense.aggregate({
+        where: {
+          organizationId,
+          status: "PAID",
+          expenseDate: { gte: periodStart, lt: periodEnd },
+        },
+        _sum: { amount: true },
+        _count: true,
+      });
+
+      trends.unshift({
+        period: `Semaine ${periods - i}`,
+        startDate: periodStart,
+        endDate: periodEnd,
+        amount: result._sum.amount || 0,
+        count: result._count,
+      });
+    }
+
+    return trends;
+  }
+
+  async #getExpenseControlRate(organizationId) {
+    const [total, approved, rejected] = await Promise.all([
+      prisma.expense.count({
+        where: { organizationId, status: { not: "PENDING" } },
+      }),
+      prisma.expense.count({
+        where: { organizationId, status: { in: ["APPROVED", "PAID"] } },
+      }),
+      prisma.expense.count({
+        where: { organizationId, status: "REJECTED" },
+      }),
+    ]);
+
+    if (total === 0) return { approvalRate: 0, rejectionRate: 0 };
+
+    return {
+      approvalRate: Math.round((approved / total) * 100),
+      rejectionRate: Math.round((rejected / total) * 100),
+    };
+  }
+
+  // ======================================================
+  // MÉTHODES EXISTANTES
   // ======================================================
 
   async #getTotalCollected(organizationId) {
@@ -121,17 +353,11 @@ export default class FinancialDashboardService {
 
   async #getPendingContributions(organizationId) {
     const count = await prisma.contribution.count({
-      where: {
-        organizationId,
-        status: { in: ["PENDING", "PARTIAL"] },
-      },
+      where: { organizationId, status: { in: ["PENDING", "PARTIAL"] } },
     });
 
     const amount = await prisma.contribution.aggregate({
-      where: {
-        organizationId,
-        status: { in: ["PENDING", "PARTIAL"] },
-      },
+      where: { organizationId, status: { in: ["PENDING", "PARTIAL"] } },
       _sum: { amount: true, amountPaid: true },
     });
 
@@ -171,17 +397,11 @@ export default class FinancialDashboardService {
 
   async #getOverdueContributions(organizationId) {
     const count = await prisma.contribution.count({
-      where: {
-        organizationId,
-        status: "OVERDUE",
-      },
+      where: { organizationId, status: "OVERDUE" },
     });
 
     const amount = await prisma.contribution.aggregate({
-      where: {
-        organizationId,
-        status: "OVERDUE",
-      },
+      where: { organizationId, status: "OVERDUE" },
       _sum: { amount: true, amountPaid: true },
     });
 
@@ -209,10 +429,7 @@ export default class FinancialDashboardService {
         organizationId,
         paymentStatus: "COMPLETED",
         type: { in: ["CONTRIBUTION", "DEBT_REPAYMENT"] },
-        createdAt: {
-          gte: today,
-          lt: tomorrow,
-        },
+        createdAt: { gte: today, lt: tomorrow },
       },
       _sum: { amount: true },
       _count: true,
@@ -235,10 +452,7 @@ export default class FinancialDashboardService {
         organizationId,
         paymentStatus: "COMPLETED",
         type: { in: ["CONTRIBUTION", "DEBT_REPAYMENT"] },
-        createdAt: {
-          gte: weekAgo,
-          lte: today,
-        },
+        createdAt: { gte: weekAgo, lte: today },
       },
       _sum: { amount: true },
       _count: true,
@@ -247,19 +461,13 @@ export default class FinancialDashboardService {
     return {
       amount: result._sum.amount || 0,
       count: result._count,
-      period: {
-        from: weekAgo,
-        to: today,
-      },
+      period: { from: weekAgo, to: today },
     };
   }
 
   async #getRemainingToCollect(organizationId) {
     const result = await prisma.contribution.aggregate({
-      where: {
-        organizationId,
-        status: { in: ["PENDING", "PARTIAL"] },
-      },
+      where: { organizationId, status: { in: ["PENDING", "PARTIAL"] } },
       _sum: { amount: true, amountPaid: true },
     });
 
@@ -302,12 +510,7 @@ export default class FinancialDashboardService {
       include: {
         membership: {
           include: {
-            user: {
-              select: {
-                prenom: true,
-                nom: true,
-              },
-            },
+            user: { select: { prenom: true, nom: true } },
           },
         },
       },
@@ -318,17 +521,9 @@ export default class FinancialDashboardService {
 
   async #getRecentRepayments(organizationId, limit = 10) {
     return await prisma.repayment.findMany({
-      where: {
-        debt: {
-          organizationId,
-        },
-      },
+      where: { debt: { organizationId } },
       include: {
-        debt: {
-          select: {
-            title: true,
-          },
-        },
+        debt: { select: { title: true } },
         transaction: true,
       },
       orderBy: { paymentDate: "desc" },
@@ -351,10 +546,7 @@ export default class FinancialDashboardService {
           organizationId,
           paymentStatus: "COMPLETED",
           type: { in: ["CONTRIBUTION", "DEBT_REPAYMENT"] },
-          createdAt: {
-            gte: periodStart,
-            lt: periodEnd,
-          },
+          createdAt: { gte: periodStart, lt: periodEnd },
         },
         _sum: { amount: true },
       });
@@ -381,10 +573,7 @@ export default class FinancialDashboardService {
         _count: true,
       }),
       prisma.debt.aggregate({
-        where: {
-          organizationId,
-          status: "PAID",
-        },
+        where: { organizationId, status: "PAID" },
         _sum: { initialAmount: true },
         _count: true,
       }),
@@ -451,14 +640,9 @@ export default class FinancialDashboardService {
       where: {
         organizationId,
         status: "PAID",
-        paymentDate: {
-          not: null,
-        },
+        paymentDate: { not: null },
       },
-      select: {
-        dueDate: true,
-        paymentDate: true,
-      },
+      select: { dueDate: true, paymentDate: true },
       take: 100,
     });
 

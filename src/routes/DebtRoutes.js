@@ -343,6 +343,62 @@ export default class DebtRoutes {
     this.router.get("/:organizationId/my-debts", (req, res) =>
       this.controller.getMyDebts(req, res),
     );
+
+    /**
+     * @swagger
+     * ❌ NOUVELLE ROUTE : Annuler une dette
+     * /api/debts/{organizationId}/{id}/cancel:
+     *   put:
+     *     summary: Annuler une dette (admin uniquement)
+     *     tags: [Debts]
+     *     security:
+     *       - bearerAuth: []
+     *     parameters:
+     *       - in: path
+     *         name: organizationId
+     *         required: true
+     *         schema:
+     *           type: string
+     *       - in: path
+     *         name: id
+     *         required: true
+     *         schema:
+     *           type: string
+     *     requestBody:
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               reason:
+     *                 type: string
+     *                 description: Raison de l'annulation
+     *     responses:
+     *       200:
+     *         description: Dette annulée avec succès
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 id:
+     *                   type: string
+     *                 status:
+     *                   type: string
+     *                   example: CANCELLED
+     *                 remainingAmount:
+     *                   type: number
+     *                   example: 0
+     *       400:
+     *         description: Dette déjà annulée
+     *       403:
+     *         description: Accès non autorisé (admin requis)
+     *       404:
+     *         description: Dette non trouvée
+     */
+    this.router.put("/:organizationId/:id/cancel", (req, res) =>
+      this.controller.cancelDebt(req, res),
+    );
   }
 
   get routes() {
