@@ -39,7 +39,7 @@ export default class AuthService {
         avatarUrl = await this.mediaUploader.upload(
           avatarFile,
           "organizations/avatars",
-          `user_${prenom}_${nom}`.toLowerCase()
+          `user_${prenom}_${nom}`.toLowerCase(),
         );
       }
 
@@ -89,7 +89,7 @@ export default class AuthService {
       // Rollback de l'upload si erreur
       if (avatarUrl) {
         await this.mediaUploader.rollback(
-          `user_${prenom}_${nom}`.toLowerCase()
+          `user_${prenom}_${nom}`.toLowerCase(),
         );
       }
       throw error;
@@ -108,13 +108,13 @@ export default class AuthService {
     // Vérifier si le mot de passe est défini
     if (!user.password) {
       throw new Error(
-        "Aucun mot de passe défini. Veuillez réinitialiser votre mot de passe."
+        "Aucun mot de passe défini. Veuillez réinitialiser votre mot de passe.",
       );
     }
 
     const isPasswordValid = await this.passwordHasher.compare(
       password,
-      user.password
+      user.password,
     );
 
     if (!isPasswordValid) {
@@ -169,6 +169,9 @@ export default class AuthService {
         updatedAt: true,
         lastLoginAt: true,
         memberships: {
+          where: {
+            organizationId: { not: null },
+          },
           include: {
             organization: {
               select: {
@@ -210,7 +213,7 @@ export default class AuthService {
         const uploadedUrl = await this.mediaUploader.upload(
           avatarFile,
           "organizations/avatars",
-          prefix
+          prefix,
         );
 
         newAvatarInfo = { url: uploadedUrl, prefix };
