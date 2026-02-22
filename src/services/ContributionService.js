@@ -568,6 +568,65 @@ export default class ContributionService {
     };
   }
 
+  async getMyContributions(organizationId, currentUserId, filters = {}) {
+    const membership = await this.#getActiveMembership(
+      currentUserId,
+      organizationId,
+    );
+
+    const { status, page = 1, limit = 10 } = filters;
+    const skip = (page - 1) * limit;
+
+    const where = {
+      organizationId,
+      membershipId: membership.id,
+      ...(status && { status }),
+    };
+
+    const [contributions, total, totals] = await Promise.all([
+      prisma.contribution.findMany({
+        where,
+        include: {
+          contributionPlan: {
+            select: {
+              id: true,
+              name: true,
+              amount: true,
+              frequency: true,
+            },
+          },
+        },
+        skip,
+        take: limit,
+        orderBy: { dueDate: "desc" },
+      }),
+      prisma.contribution.count({ where }),
+      prisma.contribution.aggregate({
+        where,
+        _sum: { amount: true, amountPaid: true },
+      }),
+    ]);
+
+    return {
+      contributions: contributions.map((c) => ({
+        ...c,
+        remainingAmount: c.amount - c.amountPaid,
+      })),
+      totals: {
+        totalAmount: totals._sum.amount || 0,
+        totalPaid: totals._sum.amountPaid || 0,
+        totalRemaining:
+          (totals._sum.amount || 0) - (totals._sum.amountPaid || 0),
+      },
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
+  }
+
   /* ======================================================
      NOTIFICATIONS
   ====================================================== */
