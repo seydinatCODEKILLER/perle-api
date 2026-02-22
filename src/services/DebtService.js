@@ -573,6 +573,10 @@ export default class DebtService {
         throw new Error("Dette déjà payée");
       }
 
+      if (debt.status === "CANCELLED") {
+        throw new Error("Impossible de rembourser une dette annulée");
+      }
+
       if (amount > debt.remainingAmount) {
         throw new Error(`Montant trop élevé. Reste: ${debt.remainingAmount}`);
       }
