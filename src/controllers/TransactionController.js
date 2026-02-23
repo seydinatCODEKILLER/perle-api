@@ -121,6 +121,40 @@ export default class TransactionController {
     }
   }
 
+  async getMyTransactions(req, res) {
+    try {
+      const { organizationId } = req.params;
+      const userId = req.user.id;
+      const {
+        type,
+        paymentMethod,
+        paymentStatus,
+        startDate,
+        endDate,
+        page,
+        limit,
+      } = req.query;
+
+      const result = await this.service.getMyTransactions(
+        organizationId,
+        userId,
+        {
+          type,
+          paymentMethod,
+          paymentStatus,
+          startDate,
+          endDate,
+          page: parseInt(page) || 1,
+          limit: parseInt(limit) || 10,
+        },
+      );
+
+      return res.success(result, "Mes transactions récupérées avec succès");
+    } catch (error) {
+      return res.error(error.message, 400);
+    }
+  }
+
   async verifyWalletIntegrity(req, res) {
     try {
       const { organizationId } = req.params;

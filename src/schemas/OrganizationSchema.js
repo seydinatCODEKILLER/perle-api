@@ -32,7 +32,9 @@ export default class OrganizationSchema {
         .object({
           initialBalance: z
             .number()
-            .nonnegative({ message: "Le solde initial doit être positif ou nul" })
+            .nonnegative({
+              message: "Le solde initial doit être positif ou nul",
+            })
             .default(0),
         })
         .optional(),

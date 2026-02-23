@@ -109,6 +109,68 @@ export default class TransactionRoutes {
 
     /**
      * @swagger
+     * /api/transactions/{organizationId}/members:
+     *   get:
+     *     summary: Voir les transactions d'un membre spécifique
+     *     tags: [Transactions]
+     *     security:
+     *       - bearerAuth: []
+     *     parameters:
+     *       - in: path
+     *         name: organizationId
+     *         required: true
+     *         schema:
+     *           type: string
+     *       - in: path
+     *         name: membershipId
+     *         required: true
+     *         schema:
+     *           type: string
+     *       - in: query
+     *         name: type
+     *         schema:
+     *           type: string
+     *           enum: [CONTRIBUTION, DEBT_REPAYMENT, FINE, DONATION, EXPENSE, OTHER]
+     *       - in: query
+     *         name: paymentMethod
+     *         schema:
+     *           type: string
+     *           enum: [CASH, MOBILE_MONEY, BANK_TRANSFER, CHECK, CREDIT_CARD]
+     *       - in: query
+     *         name: paymentStatus
+     *         schema:
+     *           type: string
+     *           enum: [PENDING, COMPLETED, FAILED, REFUNDED]
+     *       - in: query
+     *         name: startDate
+     *         schema:
+     *           type: string
+     *           format: date
+     *       - in: query
+     *         name: endDate
+     *         schema:
+     *           type: string
+     *           format: date
+     *       - in: query
+     *         name: page
+     *         schema:
+     *           type: integer
+     *           default: 1
+     *       - in: query
+     *         name: limit
+     *         schema:
+     *           type: integer
+     *           default: 10
+     *     responses:
+     *       200:
+     *         description: Transactions du membre
+     */
+    this.router.get("/:organizationId/members/transactions", (req, res) =>
+      this.controller.getMyTransactions(req, res),
+    );
+
+    /**
+     * @swagger
      * /api/transactions/{organizationId}/transaction/{id}:
      *   get:
      *     summary: Voir une transaction spécifique

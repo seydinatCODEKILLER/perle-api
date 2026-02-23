@@ -370,6 +370,20 @@ export default class TransactionService {
     };
   }
 
+  async getMyTransactions(organizationId, currentUserId, filters = {}) {
+    const membership = await this.#getActiveMembership(
+      currentUserId,
+      organizationId,
+    );
+
+    return this.getMemberTransactions(
+      organizationId,
+      membership.id,
+      currentUserId,
+      filters,
+    );
+  }
+
   /* =======================
    ✅ VÉRIFICATION COHÉRENCE
 ======================== */
