@@ -291,6 +291,50 @@ export default class TransactionService {
     currentUserId,
     filters = {},
   ) {
+    const currentMembership = await this.#getActiveMembership(
+      currentUserId,
+      organizationId,
+    );
+
+    if (!currentMembership) {
+      throw new Error("Accès refusé");
+    }
+
+    // 🔐 Seul ADMIN peut cibler un autre membre
+    if (
+      currentMembership.role !== "ADMIN" &&
+      currentMembership.id !== membershipId
+    ) {
+      throw new Error("Permissions insuffisantes");
+    }
+
+    return this.#getTransactionsInternal(
+      organizationId,
+      { membershipId },
+      filters,
+    );
+  }
+
+  async getMyTransactions(organizationId, currentUserId, filters = {}) {
+    const membership = await this.#getActiveMembership(
+      currentUserId,
+      organizationId,
+    );
+
+    if (!membership) {
+      throw new Error("Accès refusé");
+    }
+
+    return this.#getTransactionsInternal(
+      organizationId,
+      {
+        membershipId: membership.id,
+      },
+      filters,
+    );
+  }
+
+  async #getTransactionsInternal(organizationId, extraWhere, filters) {
     const {
       type,
       paymentMethod,
@@ -303,21 +347,9 @@ export default class TransactionService {
 
     const skip = (page - 1) * limit;
 
-    const currentMembership = await this.#getActiveMembership(
-      currentUserId,
-      organizationId,
-    );
-
-    if (
-      currentMembership.role !== "ADMIN" &&
-      currentMembership.id !== membershipId
-    ) {
-      throw new Error("Permissions insuffisantes");
-    }
-
     const whereClause = {
       organizationId,
-      membershipId,
+      ...extraWhere,
       ...(type && { type }),
       ...(paymentMethod && { paymentMethod }),
       ...(paymentStatus && { paymentStatus }),
@@ -334,7 +366,6 @@ export default class TransactionService {
             select: { id: true, name: true, currency: true },
           },
           wallet: {
-            // ✅ AJOUT
             select: {
               id: true,
               currentBalance: true,
@@ -346,9 +377,7 @@ export default class TransactionService {
         take: limit,
         orderBy: { createdAt: "desc" },
       }),
-
       prisma.transaction.count({ where: whereClause }),
-
       prisma.transaction.aggregate({
         where: whereClause,
         _sum: { amount: true },
@@ -368,20 +397,6 @@ export default class TransactionService {
         pages: Math.ceil(total / limit),
       },
     };
-  }
-
-  async getMyTransactions(organizationId, currentUserId, filters = {}) {
-    const membership = await this.#getActiveMembership(
-      currentUserId,
-      organizationId,
-    );
-
-    return this.getMemberTransactions(
-      organizationId,
-      membership.id,
-      currentUserId,
-      filters,
-    );
   }
 
   /* =======================
