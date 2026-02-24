@@ -13,6 +13,7 @@ export default class TokenGenerator {
   }
 
   signRefresh(payload) {
+    console.log("JWT_REFRESH_SECRET =", env.JWT_REFRESH_SECRET);
     return jwt.sign(payload, env.JWT_REFRESH_SECRET, {
       expiresIn: env.JWT_REFRESH_DURATION,
     });
