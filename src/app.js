@@ -30,7 +30,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());  
 app.use(cors({
-  origin: true,
+  origin: "https://perle-front.vercel.app/",
   credentials: true,
 }));
 app.use(httpLogger);
