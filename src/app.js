@@ -1,6 +1,5 @@
 import express from "express";
 import cors from "cors";
-import cookieParser from "cookie-parser"; 
 import responseHandler from "./middlewares/responseMiddleware.js";
 import logger from "./config/logger.js";
 import {
@@ -21,8 +20,6 @@ import swaggerUi from "swagger-ui-express";
 import { swaggerOptions } from "./config/swagger.js";
 import { generalLimiter } from "./config/rateLimiter.js";
 import httpLogger, { errorLogger } from "./utils/Httplogger.js";
-import { tr } from "zod/locales";
-import { allowedOrigins } from "./config/cors.js";
 
 const app = express();
 const specs = swaggerJSDoc(swaggerOptions);
@@ -30,26 +27,12 @@ const specs = swaggerJSDoc(swaggerOptions);
 // Middlewares globaux
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());  
-app.use(cors({
-  origin: true, // Permet les requêtes CORS de n'importe quelle origine
-  credentials: true,
-}));
-
+app.use(cors());
 app.use(httpLogger);
 app.use(responseHandler);
 
 // Appliquer le rate limiter général à toutes les routes API
-// app.use("/api", generalLimiter);
-
-// app.options("*", cors({
-//   origin: (origin, callback) => {
-//     if (!origin) return callback(null, true);
-//     if (allowedOrigins.includes(origin)) callback(null, true);
-//     else callback(new Error(`Origin ${origin} not allowed by CORS`));
-//   },
-//   credentials: true,
-// }));
+app.use("/api", generalLimiter);
 
 // Logger middleware
 logger.info("API middlewares initialized");

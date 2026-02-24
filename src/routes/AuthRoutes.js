@@ -1,5 +1,3 @@
-// routes/authRoutes.js
-
 import express from "express";
 import AuthController from "../controllers/AuthController.js";
 import AuthMiddleware from "../middlewares/AuthMiddleware.js";
@@ -65,7 +63,28 @@ export default class AuthRoutes {
      *       properties:
      *         user:
      *           $ref: '#/components/schemas/User'
-     *       description: "⚠️ Les tokens (accessToken et refreshToken) sont définis automatiquement dans les cookies HttpOnly et ne sont pas visibles dans la réponse JSON"
+     *         accessToken:
+     *           type: string
+     *           example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+     *         refreshToken:
+     *           type: string
+     *           example: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0..."
+     *
+     *     RefreshTokenResponse:
+     *       type: object
+     *       properties:
+     *         accessToken:
+     *           type: string
+     *           example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+     *
+     *     RefreshTokenRequest:
+     *       type: object
+     *       required:
+     *         - refreshToken
+     *       properties:
+     *         refreshToken:
+     *           type: string
+     *           example: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0..."
      *
      *     RegisterRequest:
      *       type: object
@@ -74,7 +93,6 @@ export default class AuthRoutes {
      *         - nom
      *         - email
      *         - password
-     *         - phone
      *       properties:
      *         prenom:
      *           type: string
@@ -95,7 +113,7 @@ export default class AuthRoutes {
      *           example: "MonMotDePasse123!"
      *         phone:
      *           type: string
-     *           example: "781234567"
+     *           example: "+221781234567"
      *
      *     LoginRequest:
      *       type: object
@@ -165,16 +183,10 @@ export default class AuthRoutes {
      *           example: "Détails de l'erreur"
      *
      *   securitySchemes:
-     *     cookieAuth:
-     *       type: apiKey
-     *       in: cookie
-     *       name: accessToken
-     *       description: "Cookie HttpOnly contenant le JWT access token"
      *     bearerAuth:
      *       type: http
      *       scheme: bearer
      *       bearerFormat: JWT
-     *       description: "Alternative : Header Authorization avec Bearer token (pour compatibilité)"
      */
 
     // Routes publiques
@@ -185,7 +197,6 @@ export default class AuthRoutes {
      *   post:
      *     summary: Inscription d'un nouvel utilisateur
      *     tags: [Authentication]
-     *     security: []
      *     requestBody:
      *       required: true
      *       content:
@@ -202,14 +213,6 @@ export default class AuthRoutes {
      *     responses:
      *       201:
      *         description: Utilisateur créé avec succès
-     *         headers:
-     *           Set-Cookie:
-     *             description: Cookies HttpOnly contenant accessToken et refreshToken
-     *             schema:
-     *               type: string
-     *               example: |
-     *                 accessToken=eyJhbG...; Path=/; HttpOnly; SameSite=Lax
-     *                 refreshToken=eyJhbG...; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000
      *         content:
      *           application/json:
      *             schema:
@@ -226,7 +229,7 @@ export default class AuthRoutes {
      *             schema:
      *               $ref: '#/components/schemas/Error'
      *       409:
-     *         description: Email ou téléphone déjà utilisé
+     *         description: Email déjà utilisé
      *         content:
      *           application/json:
      *             schema:
@@ -242,7 +245,6 @@ export default class AuthRoutes {
      *   post:
      *     summary: Connexion avec téléphone et mot de passe
      *     tags: [Authentication]
-     *     security: []
      *     requestBody:
      *       required: true
      *       content:
@@ -252,14 +254,6 @@ export default class AuthRoutes {
      *     responses:
      *       200:
      *         description: Connexion réussie
-     *         headers:
-     *           Set-Cookie:
-     *             description: Cookies HttpOnly contenant accessToken et refreshToken
-     *             schema:
-     *               type: string
-     *               example: |
-     *                 accessToken=eyJhbG...; Path=/; HttpOnly; SameSite=Lax
-     *                 refreshToken=eyJhbG...; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000
      *         content:
      *           application/json:
      *             schema:
@@ -296,19 +290,16 @@ export default class AuthRoutes {
      *   post:
      *     summary: Rafraîchir l'access token
      *     tags: [Authentication]
-     *     security: []
-     *     description: |
-     *       Permet d'obtenir un nouveau access token en utilisant le refresh token stocké dans les cookies.
-     *       ⚠️ Le refresh token est automatiquement envoyé via les cookies, aucun body n'est nécessaire.
+     *     description: Permet d'obtenir un nouveau access token en utilisant un refresh token valide
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             $ref: '#/components/schemas/RefreshTokenRequest'
      *     responses:
      *       200:
      *         description: Token rafraîchi avec succès
-     *         headers:
-     *           Set-Cookie:
-     *             description: Nouveau cookie accessToken
-     *             schema:
-     *               type: string
-     *               example: accessToken=eyJhbG...; Path=/; HttpOnly; SameSite=Lax
      *         content:
      *           application/json:
      *             schema:
@@ -316,9 +307,14 @@ export default class AuthRoutes {
      *                 - $ref: '#/components/schemas/Success'
      *                 - type: object
      *                   properties:
-     *                     message:
-     *                       type: string
-     *                       example: "Token rafraîchi avec succès"
+     *                     data:
+     *                       $ref: '#/components/schemas/RefreshTokenResponse'
+     *       400:
+     *         description: Refresh token manquant
+     *         content:
+     *           application/json:
+     *             schema:
+     *               $ref: '#/components/schemas/Error'
      *       401:
      *         description: Refresh token invalide, révoqué ou expiré
      *         content:
@@ -339,7 +335,7 @@ export default class AuthRoutes {
      *     summary: Récupérer les informations de l'utilisateur connecté
      *     tags: [Authentication]
      *     security:
-     *       - cookieAuth: []
+     *       - bearerAuth: []
      *     responses:
      *       200:
      *         description: Informations utilisateur récupérées avec succès
@@ -376,7 +372,7 @@ export default class AuthRoutes {
      *     summary: Mettre à jour le profil utilisateur
      *     tags: [Authentication]
      *     security:
-     *       - cookieAuth: []
+     *       - bearerAuth: []
      *     requestBody:
      *       required: true
      *       content:
@@ -429,21 +425,21 @@ export default class AuthRoutes {
      *     summary: Déconnexion de l'utilisateur
      *     tags: [Authentication]
      *     security:
-     *       - cookieAuth: []
-     *     description: |
-     *       Déconnecte l'utilisateur en révoquant le refresh token et en supprimant les cookies.
-     *       ⚠️ Le refresh token est automatiquement récupéré depuis les cookies, aucun body n'est nécessaire.
+     *       - bearerAuth: []
+     *     requestBody:
+     *       required: false
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               refreshToken:
+     *                 type: string
+     *                 description: Refresh token à révoquer (optionnel)
+     *                 example: "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0..."
      *     responses:
      *       200:
      *         description: Déconnexion réussie
-     *         headers:
-     *           Set-Cookie:
-     *             description: Cookies supprimés (expiration immédiate)
-     *             schema:
-     *               type: string
-     *               example: |
-     *                 accessToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT
-     *                 refreshToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT
      *         content:
      *           application/json:
      *             schema:
@@ -469,24 +465,19 @@ export default class AuthRoutes {
      * @swagger
      * /api/auth/revoke-token:
      *   post:
-     *     summary: Révoquer le refresh token actuel
+     *     summary: Révoquer un refresh token spécifique
      *     tags: [Authentication]
      *     security:
-     *       - cookieAuth: []
-     *     description: |
-     *       Révoque le refresh token actuel de l'utilisateur.
-     *       ⚠️ Le refresh token est automatiquement récupéré depuis les cookies.
+     *       - bearerAuth: []
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             $ref: '#/components/schemas/RefreshTokenRequest'
      *     responses:
      *       200:
      *         description: Refresh token révoqué avec succès
-     *         headers:
-     *           Set-Cookie:
-     *             description: Cookies supprimés
-     *             schema:
-     *               type: string
-     *               example: |
-     *                 accessToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT
-     *                 refreshToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT
      *         content:
      *           application/json:
      *             schema:
@@ -517,19 +508,11 @@ export default class AuthRoutes {
      *     summary: Révoquer tous les refresh tokens de l'utilisateur
      *     tags: [Authentication]
      *     security:
-     *       - cookieAuth: []
+     *       - bearerAuth: []
      *     description: Déconnecte l'utilisateur de tous ses appareils en révoquant tous ses refresh tokens
      *     responses:
      *       200:
      *         description: Tous les refresh tokens ont été révoqués
-     *         headers:
-     *           Set-Cookie:
-     *             description: Cookies supprimés
-     *             schema:
-     *               type: string
-     *               example: |
-     *                 accessToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT
-     *                 refreshToken=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT
      *         content:
      *           application/json:
      *             schema:
@@ -560,7 +543,7 @@ export default class AuthRoutes {
      *     summary: Mettre à jour le droit de création d'organisation (Admin seulement)
      *     tags: [Authentication]
      *     security:
-     *       - cookieAuth: []
+     *       - bearerAuth: []
      *     requestBody:
      *       required: true
      *       content:

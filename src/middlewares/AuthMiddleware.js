@@ -1,8 +1,5 @@
-// middlewares/AuthMiddleware.js
-
 import TokenGenerator from "../config/jwt.js";
 import { prisma } from "../config/database.js";
-import { CookieManager } from "../utils/cookie.utils.js";
 
 export default class AuthMiddleware {
   constructor() {
@@ -14,11 +11,10 @@ export default class AuthMiddleware {
       try {
         let token;
 
-        // ✅ PRIORITÉ 1 : Récupérer le token depuis les cookies
-        token = CookieManager.getAccessToken(req);
-
-        // ✅ FALLBACK : Récupérer depuis le header Authorization (pour compatibilité)
-        if (!token && req.headers.authorization?.startsWith("Bearer")) {
+        if (
+          req.headers.authorization &&
+          req.headers.authorization.startsWith("Bearer")
+        ) {
           token = req.headers.authorization.split(" ")[1];
         }
 
@@ -35,7 +31,6 @@ export default class AuthMiddleware {
           select: {
             id: true,
             email: true,
-            phone: true,
             role: true,
             isActive: true,
             canCreateOrganization: true,
@@ -57,14 +52,7 @@ export default class AuthMiddleware {
         req.user = currentUser;
         next();
       } catch (error) {
-        // Gestion des erreurs de token
-        if (error.name === "TokenExpiredError") {
-          return res.error("Token expiré. Veuillez vous reconnecter.", 401);
-        }
-        if (error.name === "JsonWebTokenError") {
-          return res.error("Token invalide.", 401);
-        }
-        return res.error("Erreur d'authentification.", 401);
+        return res.error("Token invalide.", 401);
       }
     };
   }
