@@ -21,6 +21,7 @@ import swaggerUi from "swagger-ui-express";
 import { swaggerOptions } from "./config/swagger.js";
 import { generalLimiter } from "./config/rateLimiter.js";
 import httpLogger, { errorLogger } from "./utils/Httplogger.js";
+import { tr } from "zod/locales";
 
 const app = express();
 const specs = swaggerJSDoc(swaggerOptions);
@@ -30,8 +31,9 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());  
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: true, // Permet les requêtes CORS de n'importe quelle origine
   credentials: true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
 }));
 app.use(httpLogger);
 app.use(responseHandler);
