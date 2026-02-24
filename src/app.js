@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser"; 
 import responseHandler from "./middlewares/responseMiddleware.js";
 import logger from "./config/logger.js";
 import {
@@ -27,7 +28,11 @@ const specs = swaggerJSDoc(swaggerOptions);
 // Middlewares globaux
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cors());
+app.use(cookieParser());  
+app.use(cors({
+  origin: true,
+  credentials: true,
+}));
 app.use(httpLogger);
 app.use(responseHandler);
 

@@ -2,7 +2,6 @@ import PasswordHasher from "../utils/hash.js";
 import TokenGenerator from "../config/jwt.js";
 import MediaUploader from "../utils/uploadMedia.js";
 import { prisma } from "../config/database.js";
-import crypto from "crypto";
 
 export default class AuthService {
   constructor() {
@@ -290,7 +289,7 @@ export default class AuthService {
   }
 
   /**
-   * Déconnexion - révoque le refresh token fourni
+   * Déconnexion - révoque le refresh token
    */
   async logout(refreshToken) {
     if (refreshToken) {
@@ -300,10 +299,15 @@ export default class AuthService {
   }
 
   /**
-   * Génère et stocke un refresh token
+   * Génère et stocke un refresh token (JWT au lieu de random)
    */
   async generateRefreshToken(userId) {
-    const refreshToken = crypto.randomBytes(64).toString("hex");
+    // ✅ CHANGEMENT : Générer un JWT pour le refresh token
+    const refreshToken = this.tokenGenerator.signRefresh({
+      id: userId,
+      type: "refresh",
+    });
+
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 

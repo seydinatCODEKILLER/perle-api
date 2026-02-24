@@ -1,3 +1,5 @@
+// config/swagger.config.js
+
 import { env } from "./env.js";
 
 export const swaggerOptions = {
@@ -6,8 +8,20 @@ export const swaggerOptions = {
     info: {
       title: "Perle API",
       version: "1.0.0",
-      description:
-        "API complète de gestion de dahira - Gestion des transactions, catégories, dashboard, alertes et rapports",
+      description: `
+API complète de gestion de dahira - Gestion des transactions, catégories, dashboard, alertes et rapports
+
+⚠️ **Note sur l'authentification** :
+Cette API utilise des cookies HttpOnly pour l'authentification. 
+Pour tester avec Swagger UI :
+1. Utilisez d'abord l'endpoint /auth/login
+2. Les cookies seront automatiquement définis
+3. Les requêtes suivantes utiliseront ces cookies
+
+Pour les tests programmatiques, assurez-vous d'activer :
+- \`credentials: 'include'\` (fetch)
+- \`withCredentials: true\` (axios)
+  `,
       contact: {
         name: "Support Perle",
         email: "support@perle.com",
@@ -29,10 +43,19 @@ export const swaggerOptions = {
     ],
     components: {
       securitySchemes: {
+        // ✅ NOUVEAU : Authentification par cookies
+        cookieAuth: {
+          type: "apiKey",
+          in: "cookie",
+          name: "accessToken",
+          description: "Cookie HttpOnly contenant le JWT access token",
+        },
+        // ⚠️ LEGACY : Garder pour compatibilité si nécessaire
         bearerAuth: {
           type: "http",
           scheme: "bearer",
           bearerFormat: "JWT",
+          description: "Alternative : Header Authorization avec Bearer token",
         },
       },
       schemas: {
@@ -71,7 +94,7 @@ export const swaggerOptions = {
           },
         },
 
-        // Schémas Authentication
+        // ✅ Schémas Authentication mis à jour
         User: {
           type: "object",
           properties: {
@@ -79,26 +102,33 @@ export const swaggerOptions = {
             nom: { type: "string", example: "Dupont" },
             prenom: { type: "string", example: "Jean" },
             email: { type: "string", example: "jean.dupont@email.com" },
-            role: { type: "string", enum: ["USER", "ADMIN"], example: "USER" },
-            avatarUrl: { type: "string", nullable: true },
-            status: {
+            phone: { type: "string", example: "781234567" },
+            role: {
               type: "string",
-              enum: ["ACTIVE", "SUSPENDED", "DESACTIVATED", "DELETED"],
-              example: "ACTIVE",
+              enum: ["MEMBER", "ADMIN", "SUPER_ADMIN"],
+              example: "MEMBER",
             },
+            avatar: { type: "string", nullable: true },
+            isActive: { type: "boolean", example: true },
+            canCreateOrganization: { type: "boolean", example: true },
             createdAt: { type: "string", format: "date-time" },
             updatedAt: { type: "string", format: "date-time" },
+            lastLoginAt: {
+              type: "string",
+              format: "date-time",
+              nullable: true,
+            },
           },
         },
+
+        // ✅ NOUVEAU : Réponse sans tokens (cookies HttpOnly)
         AuthResponse: {
           type: "object",
           properties: {
             user: { $ref: "#/components/schemas/User" },
-            token: {
-              type: "string",
-              example: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-            },
           },
+          description:
+            "Tokens définis automatiquement dans les cookies HttpOnly",
         },
 
         // Schémas Transactions
@@ -318,9 +348,10 @@ export const swaggerOptions = {
         },
       },
     },
+    // ✅ NOUVEAU : Sécurité par défaut avec cookies
     security: [
       {
-        bearerAuth: [],
+        cookieAuth: [],
       },
     ],
   },
