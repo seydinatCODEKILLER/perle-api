@@ -21,6 +21,7 @@ import swaggerUi from "swagger-ui-express";
 import { swaggerOptions } from "./config/swagger.js";
 import { generalLimiter } from "./config/rateLimiter.js";
 import httpLogger, { errorLogger } from "./utils/Httplogger.js";
+import { allowedOrigins } from "./config/cors.js";
 
 const app = express();
 const specs = swaggerJSDoc(swaggerOptions);
@@ -30,7 +31,14 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());  
 app.use(cors({
-  origin: "https://perle-front.vercel.app/",
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    }
+  },
   credentials: true,
 }));
 app.use(httpLogger);
