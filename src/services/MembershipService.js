@@ -4,7 +4,6 @@ export default class MembershipService {
   constructor() {}
 
   async createMembership(organizationId, currentUserId, membershipData) {
-    // Vérifier les permissions (ADMIN ou FINANCIAL_MANAGER seulement)
     const currentMembership = await prisma.membership.findFirst({
       where: {
         userId: currentUserId,

@@ -46,6 +46,13 @@ export default class ContributionPlanRoutes {
      *                 type: string
      *               amount:
      *                 type: number
+     *                 description: Montant par défaut (utilisé si pas de différence par genre)
+     *               amountMale:
+     *                 type: number
+     *                 description: Montant spécifique pour les hommes (optionnel)
+     *               amountFemale:
+     *                 type: number
+     *                 description: Montant spécifique pour les femmes (optionnel)
      *               frequency:
      *                 type: string
      *                 enum: [WEEKLY, MONTHLY, QUARTERLY, YEARLY, CUSTOM]
@@ -66,7 +73,7 @@ export default class ContributionPlanRoutes {
      *         description: Plan créé avec succès
      */
     this.router.post("/:organizationId", (req, res) =>
-      this.controller.createContributionPlan(req, res)
+      this.controller.createContributionPlan(req, res),
     );
 
     /**
@@ -106,7 +113,7 @@ export default class ContributionPlanRoutes {
      *         description: Liste des plans
      */
     this.router.get("/:organizationId", (req, res) =>
-      this.controller.getOrganizationContributionPlans(req, res)
+      this.controller.getOrganizationContributionPlans(req, res),
     );
 
     /**
@@ -133,7 +140,7 @@ export default class ContributionPlanRoutes {
      *         description: Détails du plan
      */
     this.router.get("/:organizationId/plans/:id", (req, res) =>
-      this.controller.getContributionPlan(req, res)
+      this.controller.getContributionPlan(req, res),
     );
 
     /**
@@ -168,6 +175,10 @@ export default class ContributionPlanRoutes {
      *                 type: string
      *               amount:
      *                 type: number
+     *               amountMale:              
+     *                 type: number
+     *               amountFemale:            
+     *                 type: number
      *               frequency:
      *                 type: string
      *                 enum: [WEEKLY, MONTHLY, QUARTERLY, YEARLY, CUSTOM]
@@ -186,7 +197,7 @@ export default class ContributionPlanRoutes {
      *         description: Plan mis à jour
      */
     this.router.put("/:organizationId/plans/:id", (req, res) =>
-      this.controller.updateContributionPlan(req, res)
+      this.controller.updateContributionPlan(req, res),
     );
 
     /**
@@ -213,7 +224,7 @@ export default class ContributionPlanRoutes {
      *         description: Statut modifié
      */
     this.router.patch("/:organizationId/plans/:id/toggle-status", (req, res) =>
-      this.controller.toggleContributionPlanStatus(req, res)
+      this.controller.toggleContributionPlanStatus(req, res),
     );
 
     /**
@@ -251,8 +262,9 @@ export default class ContributionPlanRoutes {
      *       200:
      *         description: Cotisations générées
      */
-    this.router.post("/:organizationId/plans/:id/generate-contributions", (req, res) =>
-      this.controller.generateContributions(req, res)
+    this.router.post(
+      "/:organizationId/plans/:id/generate-contributions",
+      (req, res) => this.controller.generateContributions(req, res),
     );
 
     /**
@@ -289,8 +301,9 @@ export default class ContributionPlanRoutes {
      *       201:
      *         description: Plan assigné au membre
      */
-    this.router.post("/:organizationId/plans/:id/assign-to-member", (req, res) =>
-      this.controller.assignPlanToMember(req, res)
+    this.router.post(
+      "/:organizationId/plans/:id/assign-to-member",
+      (req, res) => this.controller.assignPlanToMember(req, res),
     );
   }
 

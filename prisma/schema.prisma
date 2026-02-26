@@ -345,6 +345,8 @@ model ContributionPlan {
   name           String
   description    String?
   amount         Float
+  amountMale     Float?
+  amountFemale   Float?  
   frequency      ContributionFrequency
   currency       String @default("XOF")
   isActive       Boolean @default(true)

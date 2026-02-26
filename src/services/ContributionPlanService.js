@@ -35,16 +35,21 @@ export default class ContributionPlanService {
   ====================================================== */
 
   async createContributionPlan(organizationId, userId, planData) {
-    const membership = await this.#requireMembership(
-      userId,
-      organizationId,
-      ["ADMIN", "FINANCIAL_MANAGER"]
-    );
+    const membership = await this.#requireMembership(userId, organizationId, [
+      "ADMIN",
+      "FINANCIAL_MANAGER",
+    ]);
 
     const plan = await prisma.contributionPlan.create({
       data: {
         ...planData,
         amount: this.#safeFloat(planData.amount),
+        amountMale: planData.amountMale
+          ? this.#safeFloat(planData.amountMale)
+          : null,
+        amountFemale: planData.amountFemale
+          ? this.#safeFloat(planData.amountFemale)
+          : null,
         startDate: this.#safeDate(planData.startDate),
         endDate: planData.endDate ? this.#safeDate(planData.endDate) : null,
         organizationId,
@@ -79,11 +84,7 @@ export default class ContributionPlanService {
     return plan;
   }
 
-  async getOrganizationContributionPlans(
-    organizationId,
-    userId,
-    filters = {}
-  ) {
+  async getOrganizationContributionPlans(organizationId, userId, filters = {}) {
     await this.#requireMembership(userId, organizationId);
 
     const { isActive, search, page = 1, limit = 10 } = filters;
@@ -122,11 +123,10 @@ export default class ContributionPlanService {
   }
 
   async updateContributionPlan(organizationId, planId, userId, updateData) {
-    const membership = await this.#requireMembership(
-      userId,
-      organizationId,
-      ["ADMIN", "FINANCIAL_MANAGER"]
-    );
+    const membership = await this.#requireMembership(userId, organizationId, [
+      "ADMIN",
+      "FINANCIAL_MANAGER",
+    ]);
 
     const updated = await prisma.contributionPlan.update({
       where: { id: planId },
@@ -161,11 +161,10 @@ export default class ContributionPlanService {
   }
 
   async toggleContributionPlanStatus(organizationId, planId, userId) {
-    const membership = await this.#requireMembership(
-      userId,
-      organizationId,
-      ["ADMIN", "FINANCIAL_MANAGER"]
-    );
+    const membership = await this.#requireMembership(userId, organizationId, [
+      "ADMIN",
+      "FINANCIAL_MANAGER",
+    ]);
 
     const plan = await prisma.contributionPlan.findFirst({
       where: { id: planId, organizationId },

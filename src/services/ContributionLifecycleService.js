@@ -50,6 +50,14 @@ export default class ContributionLifecycleService {
     return d;
   }
 
+  #resolveAmount(plan, gender) {
+    if (gender === "MALE" && plan.amountMale != null) return plan.amountMale;
+    if (gender === "FEMALE" && plan.amountFemale != null)
+      return plan.amountFemale;
+    if (plan.amount != null) return plan.amount;
+    throw new Error("Aucun montant défini pour ce membre");
+  }
+
   /* ======================================================
      GÉNÉRATION EN MASSE (MongoDB SAFE)
   ====================================================== */
@@ -57,11 +65,10 @@ export default class ContributionLifecycleService {
   async generateForPlan(organizationId, planId, userId, options = {}) {
     const { force = false, dueDateOffset = 0 } = options;
 
-    const admin = await this.#requireMembership(
-      userId,
-      organizationId,
-      ["ADMIN", "FINANCIAL_MANAGER"]
-    );
+    const admin = await this.#requireMembership(userId, organizationId, [
+      "ADMIN",
+      "FINANCIAL_MANAGER",
+    ]);
 
     const plan = await prisma.contributionPlan.findFirst({
       where: {
@@ -95,12 +102,12 @@ export default class ContributionLifecycleService {
     }
 
     const members = await prisma.membership.findMany({
-      where: {
-        organizationId,
-        status: "ACTIVE",
-      },
+      where: { organizationId, status: "ACTIVE" },
       select: {
         id: true,
+        user: {
+          select: { gender: true },
+        },
       },
     });
 
@@ -129,7 +136,7 @@ export default class ContributionLifecycleService {
           membershipId: m.id,
           contributionPlanId: planId,
           organizationId,
-          amount: plan.amount,
+          amount: this.#resolveAmount(plan, m.user?.gender),
           dueDate,
           status: "PENDING",
         })),
@@ -167,11 +174,15 @@ export default class ContributionLifecycleService {
   ====================================================== */
 
   async assignPlanToMember(organizationId, planId, membershipId, userId) {
-    const admin = await this.#requireMembership(
-      userId,
-      organizationId,
-      ["ADMIN", "FINANCIAL_MANAGER"]
-    );
+    const admin = await this.#requireMembership(userId, organizationId, [
+      "ADMIN",
+      "FINANCIAL_MANAGER",
+    ]);
+
+    const member = await prisma.membership.findUnique({
+      where: { id: membershipId },
+      include: { user: { select: { gender: true } } },
+    });
 
     const plan = await prisma.contributionPlan.findFirst({
       where: {
@@ -209,7 +220,7 @@ export default class ContributionLifecycleService {
         membershipId,
         contributionPlanId: planId,
         organizationId,
-        amount: plan.amount,
+        amount: this.#resolveAmount(plan, member.user?.gender),
         dueDate,
         status: "PENDING",
       },
@@ -237,13 +248,12 @@ export default class ContributionLifecycleService {
     organizationId,
     contributionId,
     userId,
-    status
+    status,
   ) {
-    const admin = await this.#requireMembership(
-      userId,
-      organizationId,
-      ["ADMIN", "FINANCIAL_MANAGER"]
-    );
+    const admin = await this.#requireMembership(userId, organizationId, [
+      "ADMIN",
+      "FINANCIAL_MANAGER",
+    ]);
 
     const allowedStatuses = [
       "PENDING",

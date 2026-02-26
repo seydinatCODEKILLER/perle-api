@@ -11,7 +11,6 @@ export default class ContributionPlanController {
 
   async createContributionPlan(req, res) {
     try {
-      // Validation des données
       this.schema.validateCreate(req.body);
 
       const { organizationId } = req.params;
@@ -72,7 +71,6 @@ export default class ContributionPlanController {
 
   async updateContributionPlan(req, res) {
     try {
-      // Validation des données
       this.schema.validateUpdate(req.body);
 
       const { organizationId, id } = req.params;
