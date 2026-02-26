@@ -42,6 +42,10 @@ export default class AuthRoutes {
      *           type: string
      *           enum: [SUPER_ADMIN, ADMIN, MEMBER]
      *           example: "MEMBER"
+     *         gender:
+     *           type: string
+     *           enum: [MALE, FEMALE]
+     *           example: "MALE"
      *         isActive:
      *           type: boolean
      *           example: true
@@ -114,6 +118,10 @@ export default class AuthRoutes {
      *         phone:
      *           type: string
      *           example: "+221781234567"
+     *         gender:
+     *           type: string
+     *           enum: [MALE, FEMALE]
+     *           example: "MALE"
      *
      *     LoginRequest:
      *       type: object
@@ -143,6 +151,10 @@ export default class AuthRoutes {
      *         phone:
      *           type: string
      *           example: "+221781234567"
+     *         gender:
+     *           type: string
+     *           enum: [MALE, FEMALE]
+     *           example: "FEMALE"
      *
      *     UpdateCanCreateOrgRequest:
      *       type: object
@@ -236,7 +248,7 @@ export default class AuthRoutes {
      *               $ref: '#/components/schemas/Error'
      */
     this.router.post("/register", upload.single("avatar"), (req, res) =>
-      this.controller.register(req, res)
+      this.controller.register(req, res),
     );
 
     /**
@@ -323,7 +335,7 @@ export default class AuthRoutes {
      *               $ref: '#/components/schemas/Error'
      */
     this.router.post("/refresh-token", (req, res) =>
-      this.controller.refreshToken(req, res)
+      this.controller.refreshToken(req, res),
     );
 
     // Routes protégées
@@ -362,7 +374,7 @@ export default class AuthRoutes {
      *               $ref: '#/components/schemas/Error'
      */
     this.router.get("/me", this.authMiddleware.protect(), (req, res) =>
-      this.controller.getCurrentUser(req, res)
+      this.controller.getCurrentUser(req, res),
     );
 
     /**
@@ -415,7 +427,7 @@ export default class AuthRoutes {
       "/profile",
       this.authMiddleware.protect(),
       upload.single("avatar"),
-      (req, res) => this.controller.updateProfile(req, res)
+      (req, res) => this.controller.updateProfile(req, res),
     );
 
     /**
@@ -458,7 +470,7 @@ export default class AuthRoutes {
      *               $ref: '#/components/schemas/Error'
      */
     this.router.post("/logout", this.authMiddleware.protect(), (req, res) =>
-      this.controller.logout(req, res)
+      this.controller.logout(req, res),
     );
 
     /**
@@ -498,7 +510,7 @@ export default class AuthRoutes {
     this.router.post(
       "/revoke-token",
       this.authMiddleware.protect(),
-      (req, res) => this.controller.revokeRefreshToken(req, res)
+      (req, res) => this.controller.revokeRefreshToken(req, res),
     );
 
     /**
@@ -533,7 +545,7 @@ export default class AuthRoutes {
     this.router.post(
       "/revoke-all-tokens",
       this.authMiddleware.protect(),
-      (req, res) => this.controller.revokeAllTokens(req, res)
+      (req, res) => this.controller.revokeAllTokens(req, res),
     );
 
     /**
@@ -580,7 +592,7 @@ export default class AuthRoutes {
       "/can-create-org",
       this.authMiddleware.protect(),
       this.authMiddleware.restrictTo("SUPER_ADMIN", "ADMIN"),
-      (req, res) => this.controller.updateCanCreateOrganization(req, res)
+      (req, res) => this.controller.updateCanCreateOrganization(req, res),
     );
   }
 

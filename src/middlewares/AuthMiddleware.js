@@ -22,10 +22,8 @@ export default class AuthMiddleware {
           return res.error("Accès non autorisé. Veuillez vous connecter.", 401);
         }
 
-        // Vérification du token
         const decoded = this.tokenGenerator.verify(token);
 
-        // Vérification que l'utilisateur existe toujours
         const currentUser = await prisma.user.findUnique({
           where: { id: decoded.id },
           select: {
@@ -48,7 +46,6 @@ export default class AuthMiddleware {
           return res.error("Votre compte a été désactivé.", 403);
         }
 
-        // Ajouter l'utilisateur à la requête
         req.user = currentUser;
         next();
       } catch (error) {
@@ -76,10 +73,9 @@ export default class AuthMiddleware {
           req.params.organizationId || req.body.organizationId;
 
         if (!organizationId) {
-          return next(); // Pas d'organisation spécifique
+          return next();
         }
 
-        // Vérifier si l'utilisateur a accès à cette organisation
         const membership = await prisma.membership.findFirst({
           where: {
             userId: req.user.id,

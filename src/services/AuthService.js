@@ -12,9 +12,9 @@ export default class AuthService {
   }
 
   async register(userData) {
-    const { prenom, nom, email, password, phone, avatarFile } = userData;
+    const { prenom, nom, email, password, phone, gender, avatarFile } =
+      userData;
 
-    // Vérification si l'email existe déjà
     const existingUser = await prisma.user.findUnique({
       where: { email },
     });
@@ -34,19 +34,16 @@ export default class AuthService {
     let avatarUrl = null;
 
     try {
-      // Upload de l'avatar si fourni
       if (avatarFile) {
         avatarUrl = await this.mediaUploader.upload(
           avatarFile,
           "organizations/avatars",
-          `user_${prenom}_${nom}`.toLowerCase()
+          `user_${prenom}_${nom}`.toLowerCase(),
         );
       }
 
-      // Hash du mot de passe
       const hashedPassword = await this.passwordHasher.hash(password);
 
-      // Création de l'utilisateur
       const user = await prisma.user.create({
         data: {
           prenom,
@@ -54,6 +51,7 @@ export default class AuthService {
           email,
           password: hashedPassword,
           phone,
+          gender: gender ?? null,
           avatar: avatarUrl,
         },
         select: {
@@ -64,6 +62,7 @@ export default class AuthService {
           phone: true,
           role: true,
           avatar: true,
+          gender: true,
           isActive: true,
           canCreateOrganization: true,
           createdAt: true,
@@ -71,10 +70,8 @@ export default class AuthService {
         },
       });
 
-      // Génération des tokens
       const { accessToken, refreshToken } = await this.generateTokens(user);
 
-      // Mise à jour de la dernière connexion
       await prisma.user.update({
         where: { id: user.id },
         data: { lastLoginAt: new Date() },
@@ -86,10 +83,9 @@ export default class AuthService {
         refreshToken,
       };
     } catch (error) {
-      // Rollback de l'upload si erreur
       if (avatarUrl) {
         await this.mediaUploader.rollback(
-          `user_${prenom}_${nom}`.toLowerCase()
+          `user_${prenom}_${nom}`.toLowerCase(),
         );
       }
       throw error;
@@ -97,7 +93,6 @@ export default class AuthService {
   }
 
   async login(phone, password) {
-    // Chercher l'utilisateur par téléphone
     const user = await prisma.user.findUnique({
       where: { phone },
     });
@@ -105,23 +100,21 @@ export default class AuthService {
     if (!user) throw new Error("Numéro de téléphone ou mot de passe incorrect");
     if (!user.isActive) throw new Error("Compte utilisateur inactif");
 
-    // Vérifier si le mot de passe est défini
     if (!user.password) {
       throw new Error(
-        "Aucun mot de passe défini. Veuillez réinitialiser votre mot de passe."
+        "Aucun mot de passe défini. Veuillez réinitialiser votre mot de passe.",
       );
     }
 
     const isPasswordValid = await this.passwordHasher.compare(
       password,
-      user.password
+      user.password,
     );
 
     if (!isPasswordValid) {
       throw new Error("Numéro de téléphone ou mot de passe incorrect");
     }
 
-    // Mise à jour de la dernière connexion
     await prisma.user.update({
       where: { id: user.id },
       data: { lastLoginAt: new Date() },
@@ -130,7 +123,6 @@ export default class AuthService {
     // Génération des tokens
     const { accessToken, refreshToken } = await this.generateTokens(user);
 
-    // Données utilisateur sans le mot de passe
     const userData = {
       id: user.id,
       prenom: user.prenom,
@@ -138,6 +130,7 @@ export default class AuthService {
       email: user.email,
       phone: user.phone,
       role: user.role,
+      gender: user.gender,
       avatar: user.avatar,
       isActive: user.isActive,
       canCreateOrganization: user.canCreateOrganization,
@@ -162,6 +155,7 @@ export default class AuthService {
         email: true,
         phone: true,
         role: true,
+        gender: true,
         avatar: true,
         isActive: true,
         canCreateOrganization: true,
@@ -192,37 +186,35 @@ export default class AuthService {
   }
 
   async updateProfile(userId, updateData) {
-    const { prenom, nom, phone, avatarFile } = updateData;
+    const { prenom, nom, phone, gender, avatarFile } = updateData;
 
     let newAvatarInfo;
 
     try {
-      // Récupérer l'ancien utilisateur
       const user = await prisma.user.findUnique({ where: { id: userId } });
       if (!user) throw new Error("Utilisateur non trouvé");
 
       const oldAvatarUrl = user.avatar;
 
-      // Upload du nouvel avatar si fourni
       if (avatarFile) {
         const timestamp = Date.now();
         const prefix = `user_${userId}_${timestamp}`;
         const uploadedUrl = await this.mediaUploader.upload(
           avatarFile,
           "organizations/avatars",
-          prefix
+          prefix,
         );
 
         newAvatarInfo = { url: uploadedUrl, prefix };
       }
 
-      // Mise à jour du profil
       const updatedUser = await prisma.user.update({
         where: { id: userId },
         data: {
           ...(prenom && { prenom }),
           ...(nom && { nom }),
           ...(phone && { phone }),
+          ...(gender && { gender }),
           ...(newAvatarInfo && { avatar: newAvatarInfo.url }),
         },
         select: {
@@ -233,6 +225,7 @@ export default class AuthService {
           phone: true,
           role: true,
           avatar: true,
+          gender: true,
           isActive: true,
           canCreateOrganization: true,
           createdAt: true,
@@ -241,14 +234,12 @@ export default class AuthService {
         },
       });
 
-      // Supprimer l'ancien avatar si nouveau upload réussi
       if (newAvatarInfo && oldAvatarUrl) {
         await this.mediaUploader.deleteByUrl(oldAvatarUrl);
       }
 
       return updatedUser;
     } catch (error) {
-      // Rollback si nouvel upload échoue
       if (newAvatarInfo) {
         await this.mediaUploader.rollback(newAvatarInfo.prefix);
       }
@@ -275,6 +266,7 @@ export default class AuthService {
         email: true,
         role: true,
         avatar: true,
+        gender: true,
         isActive: true,
         canCreateOrganization: true,
         createdAt: true,
@@ -327,6 +319,7 @@ export default class AuthService {
       email: user.email,
       phone: user.phone,
       role: user.role,
+      gender: user.gender,
       canCreateOrganization: user.canCreateOrganization,
     });
 
@@ -339,7 +332,6 @@ export default class AuthService {
    * Rafraîchit l'access token avec un refresh token
    */
   async refreshAccessToken(refreshToken) {
-    // Vérifier si le refresh token existe et est valide
     const tokenRecord = await prisma.refreshToken.findUnique({
       where: { token: refreshToken },
       include: { user: true },
@@ -367,6 +359,7 @@ export default class AuthService {
       email: tokenRecord.user.email,
       phone: tokenRecord.user.phone,
       role: tokenRecord.user.role,
+      gender: tokenRecord.gender,
       canCreateOrganization: tokenRecord.user.canCreateOrganization,
     });
 

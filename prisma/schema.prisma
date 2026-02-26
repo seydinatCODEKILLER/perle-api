@@ -177,6 +177,7 @@ model User {
   nom           String
   phone         String      @unique
   avatar        String?
+   gender       Gender? 
   role          UserRole    @default(MEMBER)
   isActive      Boolean     @default(true)
   canCreateOrganization Boolean @default(true)

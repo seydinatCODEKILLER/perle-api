@@ -25,6 +25,11 @@ export default class AuthSchema {
         .string()
         .min(9, { message: "Le numéro de téléphone est invalide" })
         .optional(),
+      gender: z
+        .enum(["MALE", "FEMALE"], {
+          message: "Le genre doit être MALE ou FEMALE",
+        })
+        .optional(),
     });
 
     this.#validateSchema(schema, data);
@@ -72,6 +77,21 @@ export default class AuthSchema {
       loginCode: z
         .string()
         .length(6, { message: "Le code doit contenir 6 chiffres" }),
+    });
+
+    this.#validateSchema(schema, data);
+  }
+
+  validateUpdateProfile(data) {
+    const schema = z.object({
+      prenom: z.string().min(2).optional(),
+      nom: z.string().min(2).optional(),
+      phone: z.string().min(9).optional(),
+      gender: z
+        .enum(["MALE", "FEMALE"], {
+          message: "Le genre doit être MALE ou FEMALE",
+        })
+        .optional(),
     });
 
     this.#validateSchema(schema, data);

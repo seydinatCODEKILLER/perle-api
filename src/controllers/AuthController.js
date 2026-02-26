@@ -11,7 +11,7 @@ export default class AuthController {
     try {
       this.schema.validateRegister(req.body);
 
-      const { prenom, nom, email, password, phone } = req.body;
+      const { prenom, nom, email, password, phone, gender } = req.body;
       const avatarFile = req.file;
 
       const result = await this.service.register({
@@ -20,6 +20,7 @@ export default class AuthController {
         email,
         password,
         phone,
+        gender,
         avatarFile,
       });
 
@@ -42,8 +43,8 @@ export default class AuthController {
       const statusCode = error.message.includes("incorrect")
         ? 401
         : error.message.includes("inactif")
-        ? 403
-        : 400;
+          ? 403
+          : 400;
       return res.error(error.message, statusCode);
     }
   }
@@ -71,13 +72,14 @@ export default class AuthController {
   async updateProfile(req, res) {
     try {
       const userId = req.user.id;
-      const { prenom, nom, phone } = req.body;
+      const { prenom, nom, phone, gender } = req.body;
       const avatarFile = req.file;
 
       const user = await this.service.updateProfile(userId, {
         prenom,
         nom,
         phone,
+        gender,
         avatarFile,
       });
 
@@ -97,7 +99,7 @@ export default class AuthController {
 
       const result = await this.service.updateCanCreateOrganization(
         userId,
-        canCreateOrganization
+        canCreateOrganization,
       );
 
       return res.success(result, result.message);
