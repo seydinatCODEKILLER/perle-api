@@ -15,6 +15,9 @@ export default class AuthService {
     const { prenom, nom, email, password, phone, gender, avatarFile } =
       userData;
 
+    let avatarUrl = null;
+    let avatarPrefix = null;
+
     const existingUser = await prisma.user.findUnique({
       where: { email },
     });
@@ -31,14 +34,15 @@ export default class AuthService {
       throw new Error("Un utilisateur avec ce numero existe deja");
     }
 
-    let avatarUrl = null;
-
     try {
       if (avatarFile) {
+        const timestamp = Date.now();
+        avatarPrefix = `user_${prenom}_${nom}_${timestamp}`;
+
         avatarUrl = await this.mediaUploader.upload(
           avatarFile,
           "organizations/avatars",
-          `user_${prenom}_${nom}`.toLowerCase(),
+          avatarPrefix,
         );
       }
 
@@ -84,9 +88,7 @@ export default class AuthService {
       };
     } catch (error) {
       if (avatarUrl) {
-        await this.mediaUploader.rollback(
-          `user_${prenom}_${nom}`.toLowerCase(),
-        );
+        await this.mediaUploader.rollback(avatarUrl);
       }
       throw error;
     }
