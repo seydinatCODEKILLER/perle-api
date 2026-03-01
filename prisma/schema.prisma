@@ -347,6 +347,7 @@ model ContributionPlan {
   amount         Float
   amountMale     Float?
   amountFemale   Float?  
+  differentiateByGender  Boolean   @default(false)
   frequency      ContributionFrequency
   currency       String @default("XOF")
   isActive       Boolean @default(true)
