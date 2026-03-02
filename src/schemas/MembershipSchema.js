@@ -4,9 +4,26 @@ export default class MembershipSchema {
   constructor() {}
 
   validateCreate(data) {
-    const schema = z.object({
-      phone: z.string(),
-    });
+    const schema = z.discriminatedUnion("memberType", [
+      z.object({
+        memberType: z.literal("existing"),
+        phone: z.string().min(1, "Téléphone requis"),
+        role: z.enum(["ADMIN", "FINANCIAL_MANAGER", "MEMBER"]).optional(),
+      }),
+
+      z.object({
+        memberType: z.literal("provisional"),
+        provisionalData: z.object({
+          firstName: z.string().min(1),
+          lastName: z.string().min(1),
+          phone: z.string().min(1),
+          email: z.string().email().optional(),
+          gender: z.enum(["MALE", "FEMALE"]).optional(),
+        }),
+        role: z.enum(["ADMIN", "FINANCIAL_MANAGER", "MEMBER"]).optional(),
+      }),
+    ]);
+
     this.#validateSchema(schema, data);
   }
 
