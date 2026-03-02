@@ -282,19 +282,24 @@ model OrganizationSettings {
 
 model Membership {
   id             String         @id @default(auto()) @map("_id") @db.ObjectId
-  userId         String         @db.ObjectId
+  userId         String?        @db.ObjectId           
   organizationId String         @db.ObjectId
-
   role           MembershipRole @default(MEMBER)
   loginId        String         @unique
   memberNumber   String?
+  
+  provisionalFirstName String?   
+  provisionalLastName  String?  
+  provisionalPhone     String?   
+  provisionalEmail     String?  
+  provisionalAvatar    String? 
+  
   joinDate       DateTime       @default(now())
   status         MembershipStatus @default(ACTIVE)
-
+  
   // Relations
-  user           User         @relation(fields: [userId], references: [id])
-  organization   Organization @relation(fields: [organizationId], references: [id])
-
+  user           User?          @relation(fields: [userId], references: [id])
+  organization   Organization   @relation(fields: [organizationId], references: [id])
   contributions  Contribution[]
   debts          Debt[]
   profile        MemberProfile?
@@ -304,12 +309,13 @@ model Membership {
   expenseAttachments ExpenseAttachment[]
   createdExpenses Expense[] @relation("CreatedExpenses")
   approvedExpenses Expense[] @relation("ApprovedExpenses")
-
+  
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-
+  
   @@unique([userId, organizationId])
   @@unique([organizationId, memberNumber])
+  @@index([provisionalPhone]) // ✅ Index pour recherche rapide
   @@map("memberships")
 }
 
