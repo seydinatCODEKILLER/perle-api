@@ -1,8 +1,13 @@
+// services/MembershipService.js
+
 import { prisma } from "../config/database.js";
 
 export default class MembershipService {
   constructor() {}
 
+  /**
+   * ✅ Créer un membre avec ou sans compte utilisateur
+   */
   async createMembership(organizationId, currentUserId, membershipData) {
     const currentMembership = await prisma.membership.findFirst({
       where: {
@@ -20,32 +25,100 @@ export default class MembershipService {
     // Vérifier les limites d'abonnement
     await this.#checkSubscriptionLimits(organizationId);
 
-    const { phone } = membershipData;
+    const { phone, provisionalData } = membershipData;
 
-    // Si userId n'est pas fourni, chercher téléphone
-    const user = await prisma.user.findUnique({
-      where: { phone },
-    });
+    // ✅ CAS 1: Téléphone fourni - vérifier si l'utilisateur existe
+    if (phone) {
+      const user = await prisma.user.findUnique({
+        where: { phone },
+      });
 
-    if (!user) {
+      if (user) {
+        // Vérifier si l'utilisateur est déjà membre
+        const existingMembership = await prisma.membership.findFirst({
+          where: {
+            userId: user.id,
+            organizationId,
+          },
+        });
+
+        if (existingMembership) {
+          throw new Error("Cet utilisateur est déjà membre de cette organisation");
+        }
+
+        // Créer le membership avec userId
+        return await this.#createMembershipWithUser(
+          organizationId,
+          currentUserId,
+          currentMembership.id,
+          user,
+          membershipData
+        );
+      }
+
+      // Téléphone fourni mais utilisateur non trouvé
+      // Vérifier qu'on a les données provisoires
+      if (!provisionalData?.firstName || !provisionalData?.lastName) {
+        throw new Error(
+          "Utilisateur non trouvé. Veuillez fournir les informations du membre (nom, prénom)."
+        );
+      }
+    }
+
+    // ✅ CAS 2: Créer un membre sans compte (avec données provisoires)
+    if (!provisionalData?.firstName || !provisionalData?.lastName) {
+      throw new Error("Le nom et le prénom sont requis pour créer un membre");
+    }
+
+    if (!provisionalData?.phone) {
+      throw new Error("Le numéro de téléphone est requis");
+    }
+
+    // Vérifier que le téléphone n'est pas déjà utilisé (compte ou provisoire)
+    const [existingUser, existingProvisional] = await Promise.all([
+      prisma.user.findUnique({
+        where: { phone: provisionalData.phone },
+      }),
+      prisma.membership.findFirst({
+        where: {
+          organizationId,
+          provisionalPhone: provisionalData.phone,
+          userId: null, // Seulement les membres provisoires
+        },
+      }),
+    ]);
+
+    if (existingUser) {
       throw new Error(
-        "Utilisateur non trouvé. Veuillez fournir un userId valide."
+        "Ce numéro de téléphone est déjà associé à un compte utilisateur"
       );
     }
 
-    // Vérifier si l'utilisateur est déjà membre
-    const existingMembership = await prisma.membership.findFirst({
-      where: {
-        userId: user.id,
-        organizationId,
-      },
-    });
-
-    if (existingMembership) {
-      throw new Error("Cet utilisateur est déjà membre de cette organisation");
+    if (existingProvisional) {
+      throw new Error(
+        "Ce numéro de téléphone est déjà utilisé par un membre provisoire de cette organisation"
+      );
     }
 
-    // Créer le membership
+    return await this.#createProvisionalMembership(
+      organizationId,
+      currentUserId,
+      currentMembership.id,
+      provisionalData,
+      membershipData
+    );
+  }
+
+  /**
+   * ✅ Créer un membership avec utilisateur existant
+   */
+  async #createMembershipWithUser(
+    organizationId,
+    currentUserId,
+    currentMembershipId,
+    user,
+    membershipData
+  ) {
     const membership = await prisma.membership.create({
       data: {
         userId: user.id,
@@ -63,6 +136,7 @@ export default class MembershipService {
             email: true,
             phone: true,
             avatar: true,
+            gender: true,
           },
         },
         organization: {
@@ -74,10 +148,8 @@ export default class MembershipService {
       },
     });
 
-    // Mettre à jour l'usage de l'abonnement
     await this.#updateSubscriptionUsage(organizationId, 1);
 
-    // Créer un log d'audit
     await prisma.auditLog.create({
       data: {
         action: "CREATE_MEMBERSHIP",
@@ -85,11 +157,12 @@ export default class MembershipService {
         resourceId: membership.id,
         userId: currentUserId,
         organizationId,
-        membershipId: currentMembership.id,
+        membershipId: currentMembershipId,
         details: JSON.stringify({
           userId: membership.userId,
           role: membership.role,
           memberNumber: membership.memberNumber,
+          type: "with_account",
         }),
       },
     });
@@ -97,6 +170,98 @@ export default class MembershipService {
     return membership;
   }
 
+  /**
+   * ✅ Créer un membership provisoire (sans compte)
+   */
+  async #createProvisionalMembership(
+    organizationId,
+    currentUserId,
+    currentMembershipId,
+    provisionalData,
+    membershipData
+  ) {
+    const membership = await prisma.membership.create({
+      data: {
+        userId: null, // Pas de compte utilisateur
+        organizationId,
+        role: membershipData.role || "MEMBER",
+        memberNumber: await this.#generateMemberNumber(organizationId),
+        loginId: this.#generateLoginId(),
+        // Données provisoires
+        provisionalFirstName: provisionalData.firstName,
+        provisionalLastName: provisionalData.lastName,
+        provisionalPhone: provisionalData.phone,
+        provisionalEmail: provisionalData.email || null,
+        provisionalAvatar: provisionalData.avatar || null,
+      },
+      include: {
+        organization: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+
+    await this.#updateSubscriptionUsage(organizationId, 1);
+
+    await prisma.auditLog.create({
+      data: {
+        action: "CREATE_MEMBERSHIP",
+        resource: "membership",
+        resourceId: membership.id,
+        userId: currentUserId,
+        organizationId,
+        membershipId: currentMembershipId,
+        details: JSON.stringify({
+          role: membership.role,
+          memberNumber: membership.memberNumber,
+          type: "provisional",
+          phone: membership.provisionalPhone,
+        }),
+      },
+    });
+
+    return membership;
+  }
+
+  /**
+   * ✅ Obtenir les informations d'affichage d'un membre (provisoire ou non)
+   */
+  getMemberDisplayInfo(membership) {
+    if (membership.userId && membership.user) {
+      // Membre avec compte - source de vérité = User
+      return {
+        id: membership.id,
+        firstName: membership.user.prenom,
+        lastName: membership.user.nom,
+        email: membership.user.email,
+        phone: membership.user.phone,
+        avatar: membership.user.avatar,
+        gender: membership.user.gender,
+        hasAccount: true,
+        isProvisional: false,
+      };
+    }
+
+    // Membre provisoire - source de vérité = Membership
+    return {
+      id: membership.id,
+      firstName: membership.provisionalFirstName,
+      lastName: membership.provisionalLastName,
+      email: membership.provisionalEmail,
+      phone: membership.provisionalPhone,
+      avatar: membership.provisionalAvatar,
+      gender: null,
+      hasAccount: false,
+      isProvisional: true,
+    };
+  }
+
+  /**
+   * Obtenir un membre par ID
+   */
   async getMembershipById(organizationId, membershipId, currentUserId) {
     // Vérifier que l'utilisateur a accès à cette organisation
     const currentMembership = await prisma.membership.findFirst({
@@ -124,6 +289,7 @@ export default class MembershipService {
             email: true,
             phone: true,
             avatar: true,
+            gender: true,
           },
         },
         organization: {
@@ -152,9 +318,16 @@ export default class MembershipService {
       throw new Error("Ce membre n'appartient pas à cette organisation");
     }
 
-    return membership;
+    // Enrichir avec displayInfo
+    return {
+      ...membership,
+      displayInfo: this.getMemberDisplayInfo(membership),
+    };
   }
 
+  /**
+   * ✅ Récupérer les membres avec les bonnes données d'affichage
+   */
   async getOrganizationMembers(organizationId, currentUserId, filters = {}) {
     const { status, role, search, page = 1, limit = 10 } = filters;
     const skip = (page - 1) * limit;
@@ -179,6 +352,7 @@ export default class MembershipService {
       ...(search && {
         OR: [
           { memberNumber: { contains: search, mode: "insensitive" } },
+          // Recherche dans les données User
           {
             user: {
               OR: [
@@ -189,6 +363,11 @@ export default class MembershipService {
               ],
             },
           },
+          // Recherche dans les données provisoires
+          { provisionalFirstName: { contains: search, mode: "insensitive" } },
+          { provisionalLastName: { contains: search, mode: "insensitive" } },
+          { provisionalPhone: { contains: search, mode: "insensitive" } },
+          { provisionalEmail: { contains: search, mode: "insensitive" } },
         ],
       }),
     };
@@ -205,6 +384,7 @@ export default class MembershipService {
               email: true,
               phone: true,
               avatar: true,
+              gender: true,
             },
           },
           profile: true,
@@ -222,8 +402,14 @@ export default class MembershipService {
       prisma.membership.count({ where: whereClause }),
     ]);
 
+    // ✅ Enrichir chaque membership avec les bonnes données d'affichage
+    const enrichedMembers = memberships.map((membership) => ({
+      ...membership,
+      displayInfo: this.getMemberDisplayInfo(membership),
+    }));
+
     return {
-      members: memberships,
+      members: enrichedMembers,
       pagination: {
         page,
         limit,
@@ -233,6 +419,72 @@ export default class MembershipService {
     };
   }
 
+  /**
+   * ✅ Mettre à jour un membre provisoire
+   */
+  async updateProvisionalMember(
+    organizationId,
+    membershipId,
+    currentUserId,
+    updateData
+  ) {
+    const currentMembership = await prisma.membership.findFirst({
+      where: {
+        userId: currentUserId,
+        organizationId,
+        status: "ACTIVE",
+        role: { in: ["ADMIN", "FINANCIAL_MANAGER"] },
+      },
+    });
+
+    if (!currentMembership) {
+      throw new Error("Permissions insuffisantes");
+    }
+
+    const membership = await prisma.membership.findUnique({
+      where: { id: membershipId },
+    });
+
+    if (!membership || membership.organizationId !== organizationId) {
+      throw new Error("Membre non trouvé");
+    }
+
+    // On ne peut mettre à jour que les membres provisoires
+    if (membership.userId !== null) {
+      throw new Error(
+        "Ce membre a un compte utilisateur. Modifiez son profil utilisateur."
+      );
+    }
+
+    const updated = await prisma.membership.update({
+      where: { id: membershipId },
+      data: {
+        ...(updateData.firstName && { provisionalFirstName: updateData.firstName }),
+        ...(updateData.lastName && { provisionalLastName: updateData.lastName }),
+        ...(updateData.email !== undefined && { provisionalEmail: updateData.email }),
+        ...(updateData.phone && { provisionalPhone: updateData.phone }),
+        ...(updateData.avatar !== undefined && { provisionalAvatar: updateData.avatar }),
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        action: "UPDATE_PROVISIONAL_MEMBER",
+        resource: "membership",
+        resourceId: membershipId,
+        userId: currentUserId,
+        organizationId,
+        membershipId: currentMembership.id,
+        details: JSON.stringify(updateData),
+      },
+    });
+
+    return updated;
+  }
+
+  /**
+   * Mettre à jour un membership (rôle uniquement pour compatibilité)
+   */
   async updateMembership(
     organizationId,
     membershipId,
@@ -279,6 +531,7 @@ export default class MembershipService {
             email: true,
             phone: true,
             avatar: true,
+            gender: true,
           },
         },
       },
@@ -300,6 +553,9 @@ export default class MembershipService {
     return updatedMembership;
   }
 
+  /**
+   * Mettre à jour le statut d'un membership
+   */
   async updateMembershipStatus(
     organizationId,
     membershipId,
@@ -346,6 +602,7 @@ export default class MembershipService {
             email: true,
             phone: true,
             avatar: true,
+            gender: true,
           },
         },
       },
@@ -367,6 +624,9 @@ export default class MembershipService {
     return updatedMembership;
   }
 
+  /**
+   * Mettre à jour le rôle d'un membership
+   */
   async updateMembershipRole(
     organizationId,
     membershipId,
@@ -389,7 +649,7 @@ export default class MembershipService {
       );
     }
 
-    if(!role) throw new Error("Le rôle est requis");
+    if (!role) throw new Error("Le rôle est requis");
 
     // Vérifier l'existence du membership
     const existingMembership = await prisma.membership.findUnique({
@@ -420,6 +680,7 @@ export default class MembershipService {
             email: true,
             phone: true,
             avatar: true,
+            gender: true,
           },
         },
       },
@@ -441,6 +702,9 @@ export default class MembershipService {
     return updatedMembership;
   }
 
+  /**
+   * Supprimer un membership
+   */
   async deleteMembership(organizationId, membershipId, currentUserId) {
     // Vérifier les permissions (ADMIN seulement)
     const currentMembership = await prisma.membership.findFirst({
@@ -502,6 +766,7 @@ export default class MembershipService {
         details: JSON.stringify({
           userId: deletedMembership.userId,
           role: deletedMembership.role,
+          wasProvisional: deletedMembership.userId === null,
         }),
       },
     });
@@ -509,6 +774,9 @@ export default class MembershipService {
     return deletedMembership;
   }
 
+  /**
+   * Vérifier les limites d'abonnement
+   */
   async #checkSubscriptionLimits(organizationId) {
     const subscription = await prisma.subscription.findUnique({
       where: { organizationId },
@@ -532,6 +800,9 @@ export default class MembershipService {
     }
   }
 
+  /**
+   * Mettre à jour l'usage de l'abonnement
+   */
   async #updateSubscriptionUsage(organizationId, increment) {
     await prisma.subscription.update({
       where: { organizationId },
@@ -543,10 +814,16 @@ export default class MembershipService {
     });
   }
 
+  /**
+   * Générer un loginId unique
+   */
   #generateLoginId() {
     return Math.random().toString(36).substring(2, 10).toUpperCase();
   }
 
+  /**
+   * Générer un numéro de membre unique
+   */
   async #generateMemberNumber(organizationId) {
     const org = await prisma.organization.update({
       where: { id: organizationId },

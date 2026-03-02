@@ -1,3 +1,5 @@
+// services/AuthService.js
+
 import PasswordHasher from "../utils/hash.js";
 import TokenGenerator from "../config/jwt.js";
 import MediaUploader from "../utils/uploadMedia.js";
@@ -11,21 +13,27 @@ export default class AuthService {
     this.mediaUploader = new MediaUploader();
   }
 
+  /**
+   * ✅ Inscription avec synchronisation automatique des membres provisoires
+   */
   async register(userData) {
-    const { prenom, nom, email, password, phone, gender, avatarFile } =
-      userData;
+    const { prenom, nom, email, password, phone, gender, avatarFile } = userData;
 
     let avatarUrl = null;
     let avatarPrefix = null;
 
-    const existingUser = await prisma.user.findUnique({
-      where: { email },
-    });
+    // Vérifier si l'email existe déjà
+    if (email) {
+      const existingUser = await prisma.user.findUnique({
+        where: { email },
+      });
 
-    if (existingUser) {
-      throw new Error("Un utilisateur avec cet email existe déjà");
+      if (existingUser) {
+        throw new Error("Un utilisateur avec cet email existe déjà");
+      }
     }
 
+    // Vérifier si le téléphone existe déjà
     const existUserWithPhone = await prisma.user.findUnique({
       where: { phone },
     });
@@ -35,6 +43,7 @@ export default class AuthService {
     }
 
     try {
+      // Upload de l'avatar si fourni
       if (avatarFile) {
         const timestamp = Date.now();
         avatarPrefix = `user_${prenom}_${nom}_${timestamp}`;
@@ -48,6 +57,7 @@ export default class AuthService {
 
       const hashedPassword = await this.passwordHasher.hash(password);
 
+      // Créer l'utilisateur
       const user = await prisma.user.create({
         data: {
           prenom,
@@ -74,8 +84,13 @@ export default class AuthService {
         },
       });
 
+      // ✅ NOUVEAU: Synchroniser les membres provisoires avec ce téléphone
+      const linkedMemberships = await this.#linkProvisionalMembers(phone, user.id);
+
+      // Générer les tokens
       const { accessToken, refreshToken } = await this.generateTokens(user);
 
+      // Mettre à jour la date de dernière connexion
       await prisma.user.update({
         where: { id: user.id },
         data: { lastLoginAt: new Date() },
@@ -85,8 +100,10 @@ export default class AuthService {
         user,
         accessToken,
         refreshToken,
+        linkedMemberships, // ✅ Retourner les memberships liés
       };
     } catch (error) {
+      // Rollback de l'avatar en cas d'erreur
       if (avatarUrl) {
         await this.mediaUploader.rollback(avatarUrl);
       }
@@ -94,6 +111,115 @@ export default class AuthService {
     }
   }
 
+  /**
+   * ✅ NOUVEAU: Lier les membres provisoires au nouveau compte utilisateur
+   * @private
+   */
+  async #linkProvisionalMembers(phone, userId) {
+    try {
+      // Trouver tous les memberships provisoires avec ce téléphone
+      const provisionalMemberships = await prisma.membership.findMany({
+        where: {
+          provisionalPhone: phone,
+          userId: null, // Seulement les membres sans compte
+        },
+        include: {
+          organization: {
+            select: {
+              id: true,
+              name: true,
+              type: true,
+              logo: true,
+            },
+          },
+        },
+      });
+
+      if (provisionalMemberships.length === 0) {
+        return {
+          linked: 0,
+          memberships: [],
+        };
+      }
+
+      // Lier chaque membership au compte utilisateur
+      const updatedMemberships = await Promise.all(
+        provisionalMemberships.map(async (membership) => {
+          const updated = await prisma.membership.update({
+            where: { id: membership.id },
+            data: {
+              userId, // Lier le compte
+              // Les données provisoires sont conservées pour l'historique
+              // Mais User devient la source de vérité principale
+            },
+            include: {
+              organization: {
+                select: {
+                  id: true,
+                  name: true,
+                  type: true,
+                  logo: true,
+                  currency: true,
+                },
+              },
+            },
+          });
+
+          // Créer un log d'audit pour tracer la synchronisation
+          await prisma.auditLog.create({
+            data: {
+              action: "LINK_PROVISIONAL_MEMBER",
+              resource: "membership",
+              resourceId: membership.id,
+              userId,
+              organizationId: membership.organizationId,
+              membershipId: membership.id,
+              details: JSON.stringify({
+                phone,
+                linkedAt: new Date().toISOString(),
+                previousProvisionalData: {
+                  firstName: membership.provisionalFirstName,
+                  lastName: membership.provisionalLastName,
+                  email: membership.provisionalEmail,
+                },
+                newUserData: {
+                  userId,
+                },
+              }),
+            },
+          });
+
+          return updated;
+        })
+      );
+
+      return {
+        linked: updatedMemberships.length,
+        memberships: updatedMemberships.map((m) => ({
+          id: m.id,
+          organizationId: m.organizationId,
+          organizationName: m.organization.name,
+          organizationType: m.organization.type,
+          role: m.role,
+          memberNumber: m.memberNumber,
+          joinDate: m.joinDate,
+        })),
+      };
+    } catch (error) {
+      console.error("Erreur lors de la synchronisation des membres provisoires:", error);
+      // On ne bloque pas l'inscription même si le lien échoue
+      // L'admin pourra le faire manuellement si nécessaire
+      return {
+        linked: 0,
+        memberships: [],
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Connexion
+   */
   async login(phone, password) {
     const user = await prisma.user.findUnique({
       where: { phone },
@@ -147,6 +273,9 @@ export default class AuthService {
     };
   }
 
+  /**
+   * Obtenir l'utilisateur connecté
+   */
   async getCurrentUser(userId) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -165,6 +294,9 @@ export default class AuthService {
         updatedAt: true,
         lastLoginAt: true,
         memberships: {
+          where: {
+            status: "ACTIVE", // ✅ Ne récupérer que les memberships actifs
+          },
           include: {
             organization: {
               select: {
@@ -187,6 +319,9 @@ export default class AuthService {
     return user;
   }
 
+  /**
+   * Mettre à jour le profil
+   */
   async updateProfile(userId, updateData) {
     const { prenom, nom, phone, gender, avatarFile } = updateData;
 
@@ -249,6 +384,9 @@ export default class AuthService {
     }
   }
 
+  /**
+   * Mettre à jour le droit de création d'organisation
+   */
   async updateCanCreateOrganization(userId, canCreateOrganization) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
@@ -361,7 +499,7 @@ export default class AuthService {
       email: tokenRecord.user.email,
       phone: tokenRecord.user.phone,
       role: tokenRecord.user.role,
-      gender: tokenRecord.gender,
+      gender: tokenRecord.user.gender,
       canCreateOrganization: tokenRecord.user.canCreateOrganization,
     });
 
