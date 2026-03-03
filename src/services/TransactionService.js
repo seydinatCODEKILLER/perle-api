@@ -32,59 +32,74 @@ export default class TransactionService {
     };
   }
 
+  #getMemberDisplayInfo(membership) {
+    if (!membership) return null;
+
+    if (membership.userId && membership.user) {
+      return {
+        firstName: membership.user.prenom,
+        lastName: membership.user.nom,
+        email: membership.user.email,
+        phone: membership.user.phone,
+        avatar: membership.user.avatar,
+        gender: membership.user.gender,
+        hasAccount: true,
+        isProvisional: false,
+      };
+    }
+
+    return {
+      firstName: membership.provisionalFirstName,
+      lastName: membership.provisionalLastName,
+      email: membership.provisionalEmail,
+      phone: membership.provisionalPhone,
+      avatar: membership.provisionalAvatar,
+      gender: membership.provisionalGender,
+      hasAccount: false,
+      isProvisional: true,
+    };
+  }
+
   /* =======================
      📄 LISTE DES TRANSACTIONS
   ======================== */
 
   async getTransactions(organizationId, currentUserId, filters = {}) {
+    await this.#getActiveMembership(currentUserId, organizationId);
+
     const {
       type,
-      paymentMethod,
-      paymentStatus,
+      status,
       membershipId,
       startDate,
       endDate,
-      search,
       page = 1,
       limit = 10,
     } = filters;
 
     const skip = (page - 1) * limit;
 
-    await this.#getActiveMembership(currentUserId, organizationId);
-
-    const whereClause = {
+    const where = {
       organizationId,
       ...(type && { type }),
-      ...(paymentMethod && { paymentMethod }),
-      ...(paymentStatus && { paymentStatus }),
+      ...(status && { paymentStatus: status }),
       ...(membershipId && { membershipId }),
-      ...(this.#buildDateFilter(startDate, endDate) && {
-        createdAt: this.#buildDateFilter(startDate, endDate),
-      }),
-      ...(search && {
-        OR: [
-          { reference: { contains: search, mode: "insensitive" } },
-          { description: { contains: search, mode: "insensitive" } },
-          {
-            membership: {
-              user: {
-                OR: [
-                  { prenom: { contains: search, mode: "insensitive" } },
-                  { nom: { contains: search, mode: "insensitive" } },
-                  { email: { contains: search, mode: "insensitive" } },
-                  { phone: { contains: search, mode: "insensitive" } },
-                ],
-              },
+      ...(startDate || endDate
+        ? {
+            createdAt: {
+              ...(startDate && { gte: new Date(startDate) }),
+              ...(endDate && { lte: new Date(endDate) }),
             },
-          },
-        ],
-      }),
+          }
+        : {}),
     };
 
-    const [transactions, total, totals] = await Promise.all([
+    const [data, total] = await Promise.all([
       prisma.transaction.findMany({
-        where: whereClause,
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: "desc" },
         include: {
           membership: {
             include: {
@@ -95,42 +110,42 @@ export default class TransactionService {
                   nom: true,
                   email: true,
                   phone: true,
+                  avatar: true,
+                  gender: true,
                 },
               },
             },
           },
-          organization: {
-            select: { id: true, name: true },
-          },
           wallet: {
-            // ✅ AJOUT : Inclure le wallet lié
             select: {
               id: true,
-              currentBalance: true,
+              name: true,
               currency: true,
+              currentBalance: true,
             },
           },
         },
-        skip,
-        take: limit,
-        orderBy: { createdAt: "desc" },
       }),
-
-      prisma.transaction.count({ where: whereClause }),
-
-      prisma.transaction.aggregate({
-        where: whereClause,
-        _sum: { amount: true },
-        _count: true,
-      }),
+      prisma.transaction.count({ where }),
     ]);
 
+    // ✅ Enrichir avec displayInfo
+    const enrichedData = data.map((transaction) => {
+      const displayInfo = this.#getMemberDisplayInfo(transaction.membership);
+
+      return {
+        ...transaction,
+        membership: transaction.membership
+          ? {
+              ...transaction.membership,
+              displayInfo,
+            }
+          : null,
+      };
+    });
+
     return {
-      transactions,
-      totals: {
-        totalAmount: totals._sum.amount || 0,
-        totalCount: totals._count,
-      },
+      transactions: enrichedData,
       pagination: {
         page,
         limit,
@@ -147,71 +162,50 @@ export default class TransactionService {
   async getTransactionById(organizationId, transactionId, currentUserId) {
     await this.#getActiveMembership(currentUserId, organizationId);
 
-    const transaction = await prisma.transaction.findFirst({
-      where: {
-        id: transactionId,
-        organizationId,
-      },
+    const transaction = await prisma.transaction.findUnique({
+      where: { id: transactionId },
       include: {
         membership: {
           include: {
             user: {
               select: {
-                id: true,
                 prenom: true,
                 nom: true,
                 email: true,
                 phone: true,
+                avatar: true,
+                gender: true,
               },
             },
           },
         },
-        organization: {
+        wallet: {
           select: {
             id: true,
             name: true,
             currency: true,
-          },
-        },
-        wallet: {
-          // ✅ AJOUT : Wallet lié
-          select: {
-            id: true,
             currentBalance: true,
-            currency: true,
-          },
-        },
-        contribution: {
-          select: {
-            id: true,
-            amount: true,
-            contributionPlan: { select: { name: true } },
-          },
-        },
-        repayment: {
-          select: {
-            id: true,
-            amount: true,
-            debt: { select: { title: true } },
-          },
-        },
-        expense: {
-          // ✅ AJOUT : Dépense liée (si applicable)
-          select: {
-            id: true,
-            title: true,
-            category: true,
-            status: true,
           },
         },
       },
     });
 
-    if (!transaction) {
+    if (!transaction || transaction.organizationId !== organizationId) {
       throw new Error("Transaction non trouvée");
     }
 
-    return transaction;
+    // ✅ Enrichir avec displayInfo
+    const displayInfo = this.#getMemberDisplayInfo(transaction.membership);
+
+    return {
+      ...transaction,
+      membership: transaction.membership
+        ? {
+            ...transaction.membership,
+            displayInfo,
+          }
+        : null,
+    };
   }
 
   /* =======================
