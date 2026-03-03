@@ -56,8 +56,6 @@ export default class MembershipService {
         );
       }
 
-      // Téléphone fourni mais utilisateur non trouvé
-      // Vérifier qu'on a les données provisoires
       if (!provisionalData?.firstName || !provisionalData?.lastName) {
         throw new Error(
           "Utilisateur non trouvé. Veuillez fournir les informations du membre (nom, prénom)."
@@ -74,7 +72,6 @@ export default class MembershipService {
       throw new Error("Le numéro de téléphone est requis");
     }
 
-    // Vérifier que le téléphone n'est pas déjà utilisé (compte ou provisoire)
     const [existingUser, existingProvisional] = await Promise.all([
       prisma.user.findUnique({
         where: { phone: provisionalData.phone },
@@ -83,7 +80,7 @@ export default class MembershipService {
         where: {
           organizationId,
           provisionalPhone: provisionalData.phone,
-          userId: null, // Seulement les membres provisoires
+          userId: null,
         },
       }),
     ]);
@@ -182,17 +179,17 @@ export default class MembershipService {
   ) {
     const membership = await prisma.membership.create({
       data: {
-        userId: null, // Pas de compte utilisateur
+        userId: null,
         organizationId,
         role: membershipData.role || "MEMBER",
         memberNumber: await this.#generateMemberNumber(organizationId),
         loginId: this.#generateLoginId(),
-        // Données provisoires
         provisionalFirstName: provisionalData.firstName,
         provisionalLastName: provisionalData.lastName,
         provisionalPhone: provisionalData.phone,
         provisionalEmail: provisionalData.email || null,
         provisionalAvatar: provisionalData.avatar || null,
+        provisionalGender: provisionalData.gender || null,
       },
       include: {
         organization: {

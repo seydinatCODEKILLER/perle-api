@@ -292,7 +292,8 @@ model Membership {
   provisionalLastName  String?  
   provisionalPhone     String?   
   provisionalEmail     String?  
-  provisionalAvatar    String? 
+  provisionalAvatar    String?
+  provisionalGender    String?
   
   joinDate       DateTime       @default(now())
   status         MembershipStatus @default(ACTIVE)
