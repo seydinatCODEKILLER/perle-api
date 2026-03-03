@@ -97,29 +97,78 @@ export default class ContributionService {
                   nom: true,
                   email: true,
                   phone: true,
+                  gender: true, // ✅ Ajouter gender
                 },
               },
             },
           },
           contributionPlan: true,
           partialPayments: { orderBy: { paymentDate: "desc" } },
-          transaction: true,
+          transaction: {
+            include: {
+              wallet: {
+                select: {
+                  currentBalance: true,
+                  currency: true,
+                },
+              },
+            },
+          },
         },
       }),
       prisma.contribution.count({ where }),
     ]);
 
+    // ✅ Enrichir avec displayInfo
+    const enrichedData = data.map((contribution) => {
+      const displayInfo = this.#getMemberDisplayInfo(contribution.membership);
+
+      return {
+        ...contribution,
+        membership: {
+          ...contribution.membership,
+          displayInfo,
+        },
+        remainingAmount: this.#remaining(contribution),
+      };
+    });
+
     return {
-      contributions: data.map((c) => ({
-        ...c,
-        remainingAmount: this.#remaining(c),
-      })),
+      contributions: enrichedData,
       pagination: {
         page,
         limit,
         total,
         pages: Math.ceil(total / limit),
       },
+    };
+  }
+
+  #getMemberDisplayInfo(membership) {
+    if (!membership) return null;
+
+    if (membership.userId && membership.user) {
+      return {
+        firstName: membership.user.prenom,
+        lastName: membership.user.nom,
+        email: membership.user.email,
+        phone: membership.user.phone,
+        avatar: membership.user.avatar,
+        gender: membership.user.gender,
+        hasAccount: true,
+        isProvisional: false,
+      };
+    }
+
+    return {
+      firstName: membership.provisionalFirstName,
+      lastName: membership.provisionalLastName,
+      email: membership.provisionalEmail,
+      phone: membership.provisionalPhone,
+      avatar: membership.provisionalAvatar,
+      gender: membership.provisionalGender,
+      hasAccount: false,
+      isProvisional: true,
     };
   }
 
@@ -138,6 +187,7 @@ export default class ContributionService {
                 nom: true,
                 email: true,
                 phone: true,
+                gender: true, // ✅ Ajouter
               },
             },
           },
@@ -147,7 +197,6 @@ export default class ContributionService {
         transaction: {
           include: {
             wallet: {
-              // ✅ AJOUT
               select: {
                 currentBalance: true,
                 currency: true,
@@ -158,8 +207,15 @@ export default class ContributionService {
       },
     );
 
+    // ✅ Enrichir avec displayInfo
+    const displayInfo = this.#getMemberDisplayInfo(contribution.membership);
+
     return {
       ...contribution,
+      membership: {
+        ...contribution.membership,
+        displayInfo,
+      },
       remainingAmount: this.#remaining(contribution),
     };
   }
@@ -404,7 +460,6 @@ export default class ContributionService {
     const { status, page = 1, limit = 10 } = filters;
     const skip = (page - 1) * limit;
 
-    // Vérifier que l'utilisateur a accès à cette organisation
     const currentMembership = await prisma.membership.findFirst({
       where: {
         userId: currentUserId,
@@ -441,6 +496,9 @@ export default class ContributionService {
               id: true,
               name: true,
               amount: true,
+              amountMale: true, // ✅ Ajouter
+              amountFemale: true, // ✅ Ajouter
+              differentiateByGender: true, // ✅ Ajouter
               frequency: true,
             },
           },
@@ -457,7 +515,6 @@ export default class ContributionService {
       prisma.contribution.count({ where: whereClause }),
     ]);
 
-    // Calculer les totaux
     const totals = await prisma.contribution.aggregate({
       where: whereClause,
       _sum: {
