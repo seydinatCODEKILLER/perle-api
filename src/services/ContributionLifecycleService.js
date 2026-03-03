@@ -50,11 +50,28 @@ export default class ContributionLifecycleService {
     return d;
   }
 
-  #resolveAmount(plan, gender) {
-    if (gender === "MALE" && plan.amountMale != null) return plan.amountMale;
-    if (gender === "FEMALE" && plan.amountFemale != null)
-      return plan.amountFemale;
-    if (plan.amount != null) return plan.amount;
+  /**
+   * ✅ Résoudre le montant selon le genre (avec support membres provisoires)
+   */
+  #resolveAmount(plan, membership) {
+    // Récupérer le genre (User ou provisoire)
+    const gender = membership.user?.gender || membership.provisionalGender;
+
+    // Si le plan différencie par genre
+    if (plan.differentiateByGender) {
+      if (gender === "MALE" && plan.amountMale != null) {
+        return plan.amountMale;
+      }
+      if (gender === "FEMALE" && plan.amountFemale != null) {
+        return plan.amountFemale;
+      }
+    }
+
+    // Montant par défaut
+    if (plan.amount != null) {
+      return plan.amount;
+    }
+
     throw new Error("Aucun montant défini pour ce membre");
   }
 
@@ -85,7 +102,7 @@ export default class ContributionLifecycleService {
     const dueDate = this.#calculateDueDate(plan.frequency, dueDateOffset);
     const period = this.#getMonthRange(dueDate);
 
-    // 🔒 Protection métier contre les doublons (OBLIGATOIRE avec MongoDB)
+    // 🔒 Protection métier contre les doublons
     const existingCount = await prisma.contribution.count({
       where: {
         contributionPlanId: planId,
@@ -101,12 +118,19 @@ export default class ContributionLifecycleService {
       throw new Error("Cotisations déjà générées pour cette période");
     }
 
+    // ✅ Récupérer TOUS les membres (avec et sans compte)
     const members = await prisma.membership.findMany({
-      where: { organizationId, status: "ACTIVE" },
-      select: {
-        id: true,
+      where: { 
+        organizationId, 
+        status: "ACTIVE" 
+      },
+      include: {
         user: {
-          select: { gender: true },
+          select: { 
+            gender: true,
+            prenom: true,
+            nom: true,
+          },
         },
       },
     });
@@ -130,34 +154,41 @@ export default class ContributionLifecycleService {
         });
       }
 
-      // ✅ createMany SANS skipDuplicates (MongoDB)
+      // ✅ Créer les cotisations pour tous les membres
+      const contributionsData = members.map((member) => ({
+        membershipId: member.id,
+        contributionPlanId: planId,
+        organizationId,
+        amount: this.#resolveAmount(plan, member),
+        dueDate,
+        status: "PENDING",
+      }));
+
       const result = await tx.contribution.createMany({
-        data: members.map((m) => ({
-          membershipId: m.id,
-          contributionPlanId: planId,
-          organizationId,
-          amount: this.#resolveAmount(plan, m.user?.gender),
-          dueDate,
-          status: "PENDING",
-        })),
+        data: contributionsData,
       });
 
-      // 🧾 Audit
+      // 🧾 Audit avec détails sur les membres provisoires
+      const provisionalCount = members.filter(m => !m.userId).length;
+      
       await tx.auditLog.create({
         data: {
-          action: "GENERATE",
+          action: "GENERATE_CONTRIBUTIONS",
           resource: "contribution_plan",
           resourceId: planId,
           userId,
           organizationId,
           membershipId: admin.id,
-          details: {
+          details: JSON.stringify({
             generatedCount: result.count,
             periodFrom: period.from,
             periodTo: period.to,
             dueDate,
             force,
-          },
+            totalMembers: members.length,
+            provisionalMembers: provisionalCount,
+            withAccount: members.length - provisionalCount,
+          }),
         },
       });
 
@@ -165,6 +196,11 @@ export default class ContributionLifecycleService {
         generated: result.count,
         dueDate,
         period,
+        stats: {
+          total: members.length,
+          provisional: provisionalCount,
+          withAccount: members.length - provisionalCount,
+        },
       };
     });
   }
@@ -179,10 +215,23 @@ export default class ContributionLifecycleService {
       "FINANCIAL_MANAGER",
     ]);
 
+    // ✅ Inclure les données provisoires
     const member = await prisma.membership.findUnique({
       where: { id: membershipId },
-      include: { user: { select: { gender: true } } },
+      include: { 
+        user: { 
+          select: { 
+            gender: true,
+            prenom: true,
+            nom: true,
+          } 
+        } 
+      },
     });
+
+    if (!member || member.organizationId !== organizationId) {
+      throw new Error("Membre non trouvé");
+    }
 
     const plan = await prisma.contributionPlan.findFirst({
       where: {
@@ -193,12 +242,13 @@ export default class ContributionLifecycleService {
     });
 
     if (!plan) {
-      throw new Error("Plan invalide");
+      throw new Error("Plan invalide ou inactif");
     }
 
     const dueDate = this.#calculateDueDate(plan.frequency);
     const period = this.#getMonthRange(dueDate);
 
+    // ✅ Vérifier si cotisation existe déjà
     const exists = await prisma.contribution.findFirst({
       where: {
         membershipId,
@@ -212,28 +262,59 @@ export default class ContributionLifecycleService {
     });
 
     if (exists) {
-      throw new Error("Cotisation déjà existante pour ce membre");
+      throw new Error("Cotisation déjà existante pour ce membre sur cette période");
     }
 
+    // ✅ Créer la cotisation avec le bon montant selon le genre
     const contribution = await prisma.contribution.create({
       data: {
         membershipId,
         contributionPlanId: planId,
         organizationId,
-        amount: this.#resolveAmount(plan, member.user?.gender),
+        amount: this.#resolveAmount(plan, member),
         dueDate,
         status: "PENDING",
       },
+      include: {
+        membership: {
+          include: {
+            user: {
+              select: {
+                prenom: true,
+                nom: true,
+                gender: true,
+              },
+            },
+          },
+        },
+        contributionPlan: {
+          select: {
+            name: true,
+            frequency: true,
+          },
+        },
+      },
     });
 
+    // ✅ Audit avec info sur membre provisoire
     await prisma.auditLog.create({
       data: {
-        action: "ASSIGN",
+        action: "ASSIGN_CONTRIBUTION",
         resource: "contribution",
         resourceId: contribution.id,
         userId,
         organizationId,
         membershipId: admin.id,
+        details: JSON.stringify({
+          membershipId,
+          planId,
+          amount: contribution.amount,
+          dueDate,
+          isProvisional: !member.userId,
+          memberName: member.userId 
+            ? `${member.user?.prenom} ${member.user?.nom}`
+            : `${member.provisionalFirstName} ${member.provisionalLastName}`,
+        }),
       },
     });
 
@@ -267,24 +348,41 @@ export default class ContributionLifecycleService {
       throw new Error("Statut invalide");
     }
 
+    const contribution = await prisma.contribution.findUnique({
+      where: { id: contributionId },
+      include: {
+        membership: {
+          include: {
+            user: {
+              select: { prenom: true, nom: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!contribution || contribution.organizationId !== organizationId) {
+      throw new Error("Cotisation non trouvée");
+    }
+
     const updated = await prisma.contribution.update({
-      where: {
-        id: contributionId,
-      },
-      data: {
-        status,
-      },
+      where: { id: contributionId },
+      data: { status },
     });
 
     await prisma.auditLog.create({
       data: {
-        action: "UPDATE_STATUS",
+        action: "UPDATE_CONTRIBUTION_STATUS",
         resource: "contribution",
         resourceId: contributionId,
         userId,
         organizationId,
         membershipId: admin.id,
-        details: { status },
+        details: JSON.stringify({ 
+          oldStatus: contribution.status,
+          newStatus: status,
+          isProvisional: !contribution.membership.userId,
+        }),
       },
     });
 
