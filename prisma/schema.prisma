@@ -314,7 +314,6 @@ model Membership {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
   
-  @@unique([userId, organizationId])
   @@unique([organizationId, memberNumber])
   @@index([provisionalPhone]) // ✅ Index pour recherche rapide
   @@map("memberships")
