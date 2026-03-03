@@ -2,6 +2,7 @@ import express from "express";
 import MembershipController from "../controllers/MembershipController.js";
 import AuthMiddleware from "../middlewares/AuthMiddleware.js";
 import upload from "../config/multer.js";
+import { parseNestedFormData } from "../middlewares/FormDataParser.js";
 
 export default class MembershipRoutes {
   constructor() {
@@ -43,8 +44,11 @@ export default class MembershipRoutes {
      *       201:
      *         description: Membre ajouté avec succès
      */
-    this.router.post("/:organizationId/members",upload.single("avatar"), (req, res) =>
-      this.controller.createMembership(req, res)
+    this.router.post(
+      "/:organizationId/members",
+      upload.single("avatar"),
+      parseNestedFormData,
+      (req, res) => this.controller.createMembership(req, res),
     );
 
     /**
@@ -90,7 +94,7 @@ export default class MembershipRoutes {
      *         description: Liste des membres
      */
     this.router.get("/:organizationId/members", (req, res) =>
-      this.controller.getOrganizationMembers(req, res)
+      this.controller.getOrganizationMembers(req, res),
     );
 
     /**
@@ -117,7 +121,7 @@ export default class MembershipRoutes {
      *         description: Détails du membre
      */
     this.router.get("/:organizationId/members/:id", (req, res) =>
-      this.controller.getMembership(req, res)
+      this.controller.getMembership(req, res),
     );
 
     /**
@@ -159,7 +163,7 @@ export default class MembershipRoutes {
      *         description: Membre mis à jour
      */
     this.router.put("/:organizationId/members/:id", (req, res) =>
-      this.controller.updateMembership(req, res)
+      this.controller.updateMembership(req, res),
     );
 
     /**
@@ -198,7 +202,7 @@ export default class MembershipRoutes {
      *         description: Statut mis à jour
      */
     this.router.patch("/:organizationId/members/:id/status", (req, res) =>
-      this.controller.updateMembershipStatus(req, res)
+      this.controller.updateMembershipStatus(req, res),
     );
 
     /**
@@ -237,7 +241,7 @@ export default class MembershipRoutes {
      *         description: Rôle mis à jour
      */
     this.router.patch("/:organizationId/members/:id/role", (req, res) =>
-      this.controller.updateMembershipRole(req, res)
+      this.controller.updateMembershipRole(req, res),
     );
 
     /**
@@ -264,7 +268,7 @@ export default class MembershipRoutes {
      *         description: Membre supprimé
      */
     this.router.delete("/:organizationId/members/:id", (req, res) =>
-      this.controller.deleteMembership(req, res)
+      this.controller.deleteMembership(req, res),
     );
   }
 

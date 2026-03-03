@@ -25,92 +25,92 @@ export default class MembershipService {
       throw new Error("Permissions insuffisantes pour ajouter un membre");
     }
 
-    // Vérifier les limites d'abonnement
     await this.#checkSubscriptionLimits(organizationId);
 
-    const { phone, provisionalData, avatarFile } = membershipData;
+    const { phone, provisionalData, avatarFile, memberType } = membershipData;
 
-    // ✅ CAS 1: Téléphone fourni - vérifier si l'utilisateur existe
-    if (phone) {
+    // ✅ CAS 1: Membre avec compte existant
+    if (memberType === "existing" && phone) {
       const user = await prisma.user.findUnique({
         where: { phone },
       });
 
-      if (user) {
-        // Vérifier si l'utilisateur est déjà membre
-        const existingMembership = await prisma.membership.findFirst({
-          where: {
-            userId: user.id,
-            organizationId,
-          },
-        });
-
-        if (existingMembership) {
-          throw new Error(
-            "Cet utilisateur est déjà membre de cette organisation",
-          );
-        }
-
-        // Créer le membership avec userId
-        return await this.#createMembershipWithUser(
-          organizationId,
-          currentUserId,
-          currentMembership.id,
-          user,
-          membershipData,
-        );
+      if (!user) {
+        throw new Error("Aucun utilisateur trouvé avec ce numéro de téléphone");
       }
 
-      // Téléphone fourni mais utilisateur non trouvé
-      if (!provisionalData?.firstName || !provisionalData?.lastName) {
-        throw new Error(
-          "Utilisateur non trouvé. Veuillez fournir les informations du membre (nom, prénom).",
-        );
-      }
-    }
-
-    // ✅ CAS 2: Créer un membre sans compte (avec données provisoires)
-    if (!provisionalData?.firstName || !provisionalData?.lastName) {
-      throw new Error("Le nom et le prénom sont requis pour créer un membre");
-    }
-
-    if (!provisionalData?.phone) {
-      throw new Error("Le numéro de téléphone est requis");
-    }
-
-    // Vérifier que le téléphone n'est pas déjà utilisé
-    const [existingUser, existingProvisional] = await Promise.all([
-      prisma.user.findUnique({
-        where: { phone: provisionalData.phone },
-      }),
-      prisma.membership.findFirst({
+      // Vérifier si déjà membre
+      const existingMembership = await prisma.membership.findFirst({
         where: {
+          userId: user.id,
           organizationId,
-          provisionalPhone: provisionalData.phone,
-          userId: null,
         },
-      }),
-    ]);
+      });
 
-    if (existingUser) {
-      throw new Error(
-        "Ce numéro de téléphone est déjà associé à un compte utilisateur",
+      if (existingMembership) {
+        throw new Error(
+          "Cet utilisateur est déjà membre de cette organisation",
+        );
+      }
+
+      return await this.#createMembershipWithUser(
+        organizationId,
+        currentUserId,
+        currentMembership.id,
+        user,
+        membershipData,
       );
     }
 
-    if (existingProvisional) {
-      throw new Error(
-        "Ce numéro de téléphone est déjà utilisé par un membre provisoire de cette organisation",
+    // ✅ CAS 2: Membre provisoire
+    if (memberType === "provisional" && provisionalData) {
+      if (!provisionalData.firstName || !provisionalData.lastName) {
+        throw new Error("Le nom et le prénom sont requis");
+      }
+
+      if (!provisionalData.phone) {
+        throw new Error("Le numéro de téléphone est requis");
+      }
+
+      // Vérifier que le téléphone n'est pas déjà utilisé
+      const [existingUser, existingProvisional] = await Promise.all([
+        prisma.user.findUnique({
+          where: { phone: provisionalData.phone },
+        }),
+        prisma.membership.findFirst({
+          where: {
+            organizationId,
+            provisionalPhone: provisionalData.phone,
+            userId: null,
+          },
+        }),
+      ]);
+
+      if (existingUser) {
+        throw new Error(
+          "Ce numéro de téléphone est déjà associé à un compte utilisateur",
+        );
+      }
+
+      if (existingProvisional) {
+        throw new Error(
+          "Ce numéro de téléphone est déjà utilisé par un membre provisoire de cette organisation",
+        );
+      }
+
+      return await this.#createProvisionalMembership(
+        organizationId,
+        currentUserId,
+        currentMembership.id,
+        provisionalData,
+        membershipData,
+        avatarFile,
       );
     }
 
-    return await this.#createProvisionalMembership(
-      organizationId,
-      currentUserId,
-      currentMembership.id,
-      provisionalData,
-      membershipData,
-      avatarFile,
+    // ✅ Cas invalide
+    throw new Error(
+      "Données invalides. Veuillez spécifier le type de membre (existing ou provisional).",
     );
   }
 
