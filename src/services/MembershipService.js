@@ -283,7 +283,7 @@ export default class MembershipService {
       email: membership.provisionalEmail,
       phone: membership.provisionalPhone,
       avatar: membership.provisionalAvatar,
-      gender: null,
+      gender: membership.provisionalGender,
       hasAccount: false,
       isProvisional: true,
     };
