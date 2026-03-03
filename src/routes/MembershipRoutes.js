@@ -1,6 +1,7 @@
 import express from "express";
 import MembershipController from "../controllers/MembershipController.js";
 import AuthMiddleware from "../middlewares/AuthMiddleware.js";
+import upload from "../config/multer.js";
 
 export default class MembershipRoutes {
   constructor() {
@@ -42,7 +43,7 @@ export default class MembershipRoutes {
      *       201:
      *         description: Membre ajouté avec succès
      */
-    this.router.post("/:organizationId/members", (req, res) =>
+    this.router.post("/:organizationId/members",upload.single("avatar"), (req, res) =>
       this.controller.createMembership(req, res)
     );
 

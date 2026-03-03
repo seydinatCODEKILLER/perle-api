@@ -7,17 +7,22 @@ export default class MembershipController {
     this.schema = new MembershipSchema();
   }
 
-  async createMembership(req, res) {
+async createMembership(req, res) {
     try {
       this.schema.validateCreate(req.body);
 
       const { organizationId } = req.params;
       const userId = req.user.id;
 
+      const memberData = {
+        ...req.body,
+        avatarFile: req.file,
+      };
+
       const membership = await this.service.createMembership(
         organizationId,
         userId,
-        req.body
+        memberData
       );
 
       return res.success(membership, "Membre ajouté avec succès", 201);

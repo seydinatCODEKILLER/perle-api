@@ -1,9 +1,12 @@
 // services/MembershipService.js
 
 import { prisma } from "../config/database.js";
+import MediaUploader from "../utils/uploadMedia.js";
 
 export default class MembershipService {
-  constructor() {}
+  constructor() {
+    this.mediaUploader = new MediaUploader();
+  }
 
   /**
    * ✅ Créer un membre avec ou sans compte utilisateur
@@ -25,7 +28,7 @@ export default class MembershipService {
     // Vérifier les limites d'abonnement
     await this.#checkSubscriptionLimits(organizationId);
 
-    const { phone, provisionalData } = membershipData;
+    const { phone, provisionalData, avatarFile } = membershipData;
 
     // ✅ CAS 1: Téléphone fourni - vérifier si l'utilisateur existe
     if (phone) {
@@ -43,7 +46,9 @@ export default class MembershipService {
         });
 
         if (existingMembership) {
-          throw new Error("Cet utilisateur est déjà membre de cette organisation");
+          throw new Error(
+            "Cet utilisateur est déjà membre de cette organisation",
+          );
         }
 
         // Créer le membership avec userId
@@ -52,13 +57,14 @@ export default class MembershipService {
           currentUserId,
           currentMembership.id,
           user,
-          membershipData
+          membershipData,
         );
       }
 
+      // Téléphone fourni mais utilisateur non trouvé
       if (!provisionalData?.firstName || !provisionalData?.lastName) {
         throw new Error(
-          "Utilisateur non trouvé. Veuillez fournir les informations du membre (nom, prénom)."
+          "Utilisateur non trouvé. Veuillez fournir les informations du membre (nom, prénom).",
         );
       }
     }
@@ -72,6 +78,7 @@ export default class MembershipService {
       throw new Error("Le numéro de téléphone est requis");
     }
 
+    // Vérifier que le téléphone n'est pas déjà utilisé
     const [existingUser, existingProvisional] = await Promise.all([
       prisma.user.findUnique({
         where: { phone: provisionalData.phone },
@@ -87,13 +94,13 @@ export default class MembershipService {
 
     if (existingUser) {
       throw new Error(
-        "Ce numéro de téléphone est déjà associé à un compte utilisateur"
+        "Ce numéro de téléphone est déjà associé à un compte utilisateur",
       );
     }
 
     if (existingProvisional) {
       throw new Error(
-        "Ce numéro de téléphone est déjà utilisé par un membre provisoire de cette organisation"
+        "Ce numéro de téléphone est déjà utilisé par un membre provisoire de cette organisation",
       );
     }
 
@@ -102,7 +109,8 @@ export default class MembershipService {
       currentUserId,
       currentMembership.id,
       provisionalData,
-      membershipData
+      membershipData,
+      avatarFile,
     );
   }
 
@@ -114,7 +122,7 @@ export default class MembershipService {
     currentUserId,
     currentMembershipId,
     user,
-    membershipData
+    membershipData,
   ) {
     const membership = await prisma.membership.create({
       data: {
@@ -175,52 +183,77 @@ export default class MembershipService {
     currentUserId,
     currentMembershipId,
     provisionalData,
-    membershipData
+    membershipData,
+    avatarFile,
   ) {
-    const membership = await prisma.membership.create({
-      data: {
-        userId: null,
-        organizationId,
-        role: membershipData.role || "MEMBER",
-        memberNumber: await this.#generateMemberNumber(organizationId),
-        loginId: this.#generateLoginId(),
-        provisionalFirstName: provisionalData.firstName,
-        provisionalLastName: provisionalData.lastName,
-        provisionalPhone: provisionalData.phone,
-        provisionalEmail: provisionalData.email || null,
-        provisionalAvatar: provisionalData.avatar || null,
-        provisionalGender: provisionalData.gender || null,
-      },
-      include: {
-        organization: {
-          select: {
-            id: true,
-            name: true,
+    let avatarUrl = null;
+    let avatarPrefix = null;
+
+    try {
+      // ✅ Upload de l'avatar si présent
+      if (avatarFile) {
+        const timestamp = Date.now();
+        avatarPrefix = `member_${organizationId}_${provisionalData.phone}_${timestamp}`;
+
+        avatarUrl = await this.mediaUploader.upload(
+          avatarFile,
+          "organizations/members/avatars",
+          avatarPrefix,
+        );
+      }
+
+      const membership = await prisma.membership.create({
+        data: {
+          userId: null,
+          organizationId,
+          role: membershipData.role || "MEMBER",
+          memberNumber: await this.#generateMemberNumber(organizationId),
+          loginId: this.#generateLoginId(),
+          provisionalFirstName: provisionalData.firstName,
+          provisionalLastName: provisionalData.lastName,
+          provisionalPhone: provisionalData.phone,
+          provisionalEmail: provisionalData.email || null,
+          provisionalAvatar: avatarUrl,
+          provisionalGender: provisionalData.gender || null,
+        },
+        include: {
+          organization: {
+            select: {
+              id: true,
+              name: true,
+            },
           },
         },
-      },
-    });
+      });
 
-    await this.#updateSubscriptionUsage(organizationId, 1);
+      await this.#updateSubscriptionUsage(organizationId, 1);
 
-    await prisma.auditLog.create({
-      data: {
-        action: "CREATE_MEMBERSHIP",
-        resource: "membership",
-        resourceId: membership.id,
-        userId: currentUserId,
-        organizationId,
-        membershipId: currentMembershipId,
-        details: JSON.stringify({
-          role: membership.role,
-          memberNumber: membership.memberNumber,
-          type: "provisional",
-          phone: membership.provisionalPhone,
-        }),
-      },
-    });
+      await prisma.auditLog.create({
+        data: {
+          action: "CREATE_MEMBERSHIP",
+          resource: "membership",
+          resourceId: membership.id,
+          userId: currentUserId,
+          organizationId,
+          membershipId: currentMembershipId,
+          details: JSON.stringify({
+            role: membership.role,
+            memberNumber: membership.memberNumber,
+            type: "provisional",
+            phone: membership.provisionalPhone,
+            hasAvatar: !!avatarUrl,
+          }),
+        },
+      });
 
-    return membership;
+      return membership;
+    } catch (error) {
+      // ✅ Rollback de l'avatar en cas d'erreur
+      if (avatarUrl && avatarPrefix) {
+        await this.mediaUploader.rollback(avatarPrefix);
+      }
+      throw error;
+    }
   }
 
   /**
@@ -423,7 +456,7 @@ export default class MembershipService {
     organizationId,
     membershipId,
     currentUserId,
-    updateData
+    updateData,
   ) {
     const currentMembership = await prisma.membership.findFirst({
       where: {
@@ -449,18 +482,26 @@ export default class MembershipService {
     // On ne peut mettre à jour que les membres provisoires
     if (membership.userId !== null) {
       throw new Error(
-        "Ce membre a un compte utilisateur. Modifiez son profil utilisateur."
+        "Ce membre a un compte utilisateur. Modifiez son profil utilisateur.",
       );
     }
 
     const updated = await prisma.membership.update({
       where: { id: membershipId },
       data: {
-        ...(updateData.firstName && { provisionalFirstName: updateData.firstName }),
-        ...(updateData.lastName && { provisionalLastName: updateData.lastName }),
-        ...(updateData.email !== undefined && { provisionalEmail: updateData.email }),
+        ...(updateData.firstName && {
+          provisionalFirstName: updateData.firstName,
+        }),
+        ...(updateData.lastName && {
+          provisionalLastName: updateData.lastName,
+        }),
+        ...(updateData.email !== undefined && {
+          provisionalEmail: updateData.email,
+        }),
         ...(updateData.phone && { provisionalPhone: updateData.phone }),
-        ...(updateData.avatar !== undefined && { provisionalAvatar: updateData.avatar }),
+        ...(updateData.avatar !== undefined && {
+          provisionalAvatar: updateData.avatar,
+        }),
       },
     });
 
@@ -486,7 +527,7 @@ export default class MembershipService {
     organizationId,
     membershipId,
     currentUserId,
-    updateData
+    updateData,
   ) {
     // Vérifier les permissions (ADMIN seulement)
     const currentMembership = await prisma.membership.findFirst({
@@ -557,7 +598,7 @@ export default class MembershipService {
     organizationId,
     membershipId,
     currentUserId,
-    status
+    status,
   ) {
     // Vérifier les permissions (ADMIN seulement)
     const currentMembership = await prisma.membership.findFirst({
@@ -571,7 +612,7 @@ export default class MembershipService {
 
     if (!currentMembership) {
       throw new Error(
-        "Permissions insuffisantes pour modifier le statut d'un membre"
+        "Permissions insuffisantes pour modifier le statut d'un membre",
       );
     }
 
@@ -628,7 +669,7 @@ export default class MembershipService {
     organizationId,
     membershipId,
     currentUserId,
-    role
+    role,
   ) {
     // Vérifier les permissions (ADMIN seulement)
     const currentMembership = await prisma.membership.findFirst({
@@ -642,7 +683,7 @@ export default class MembershipService {
 
     if (!currentMembership) {
       throw new Error(
-        "Permissions insuffisantes pour modifier le rôle d'un membre"
+        "Permissions insuffisantes pour modifier le rôle d'un membre",
       );
     }
 
@@ -792,7 +833,7 @@ export default class MembershipService {
 
     if (memberCount >= subscription.maxMembers) {
       throw new Error(
-        `Limite de membres atteinte (${subscription.maxMembers}). Veuillez mettre à niveau votre abonnement.`
+        `Limite de membres atteinte (${subscription.maxMembers}). Veuillez mettre à niveau votre abonnement.`,
       );
     }
   }
