@@ -119,7 +119,6 @@ export default class TransactionService {
           wallet: {
             select: {
               id: true,
-              name: true,
               currency: true,
               currentBalance: true,
             },
@@ -182,7 +181,6 @@ export default class TransactionService {
         wallet: {
           select: {
             id: true,
-            name: true,
             currency: true,
             currentBalance: true,
           },
