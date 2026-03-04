@@ -350,7 +350,7 @@ model ContributionPlan {
   id             String        @id @default(auto()) @map("_id") @db.ObjectId
   name           String
   description    String?
-  amount         Float
+   amount        Float? 
   amountMale     Float?
   amountFemale   Float?  
   differentiateByGender  Boolean   @default(false)
