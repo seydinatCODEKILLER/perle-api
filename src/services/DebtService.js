@@ -379,6 +379,7 @@ export default class DebtService {
   }
 
   async getMyDebts(organizationId, currentUserId, filters = {}) {
+    // 1. Vérifier que l'utilisateur est membre actif
     const membership = await this.#requireMembership(
       currentUserId,
       organizationId,
@@ -387,12 +388,14 @@ export default class DebtService {
     const { status, page = 1, limit = 10 } = filters;
     const skip = (page - 1) * limit;
 
+    // 2. Filtres
     const where = {
       organizationId,
       membershipId: membership.id,
       ...(status && { status }),
     };
 
+    // 3. Récupération des dettes + agrégats
     const [debts, total, totals] = await Promise.all([
       prisma.debt.findMany({
         where,
@@ -400,27 +403,41 @@ export default class DebtService {
         take: limit,
         orderBy: { createdAt: "desc" },
         include: {
+          membership: this.#getMembershipInclude(),
           repayments: {
             orderBy: { paymentDate: "desc" },
           },
         },
       }),
+
       prisma.debt.count({ where }),
+
       prisma.debt.aggregate({
         where,
-        _sum: { initialAmount: true, remainingAmount: true },
+        _sum: {
+          initialAmount: true,
+          remainingAmount: true,
+        },
       }),
     ]);
 
-    const totalRepaid =
-      (totals._sum.initialAmount || 0) - (totals._sum.remainingAmount || 0);
+    // 4. Enrichissement (displayInfo)
+    const enrichedDebts = debts.map((debt) => ({
+      ...debt,
+      membership: {
+        ...debt.membership,
+        displayInfo: this.#getMemberDisplayInfo(debt.membership),
+      },
+    }));
 
+    // 5. Réponse finale
     return {
-      debts,
+      debts: enrichedDebts,
       totals: {
         totalDebts: totals._sum.initialAmount || 0,
         totalRemaining: totals._sum.remainingAmount || 0,
-        totalRepaid,
+        totalRepaid:
+          (totals._sum.initialAmount || 0) - (totals._sum.remainingAmount || 0),
       },
       pagination: {
         page,
