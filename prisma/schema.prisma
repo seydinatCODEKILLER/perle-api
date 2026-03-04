@@ -496,7 +496,7 @@ model Transaction {
   wallet   OrganizationWallet? @relation(fields: [walletId], references: [id])
   contributions  Contribution[]
   repayment      Repayment?
-  expense        Expense?
+  expense        Expense[]
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
@@ -543,7 +543,7 @@ model Expense {
   organizationId  String          @db.ObjectId
   walletId        String          @db.ObjectId
   createdById     String          @db.ObjectId
-  transactionId   String?         @unique @db.ObjectId
+  transactionId   String?         @db.ObjectId
   approvedById    String?         @db.ObjectId
 
   title           String
