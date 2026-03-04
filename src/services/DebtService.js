@@ -53,51 +53,180 @@ export default class DebtService {
     return DEBT_STATUS.ACTIVE;
   }
 
+  async #requireMembership(userId, organizationId, roles = []) {
+    const membership = await prisma.membership.findFirst({
+      where: {
+        userId,
+        organizationId,
+        status: "ACTIVE",
+        ...(roles.length && { role: { in: roles } }),
+      },
+    });
+
+    if (!membership) {
+      throw new Error("Accès non autorisé");
+    }
+
+    return membership;
+  }
+
+  #getMemberDisplayInfo(membership) {
+    if (!membership) return null;
+
+    if (membership.userId && membership.user) {
+      return {
+        firstName: membership.user.prenom,
+        lastName: membership.user.nom,
+        email: membership.user.email,
+        phone: membership.user.phone,
+        avatar: membership.user.avatar,
+        gender: membership.user.gender,
+        hasAccount: true,
+        isProvisional: false,
+      };
+    }
+
+    return {
+      firstName: membership.provisionalFirstName,
+      lastName: membership.provisionalLastName,
+      email: membership.provisionalEmail,
+      phone: membership.provisionalPhone,
+      avatar: membership.provisionalAvatar,
+      gender: membership.provisionalGender,
+      hasAccount: false,
+      isProvisional: true,
+    };
+  }
+
   /* =========================
      CREATE DEBT
   ========================= */
 
-  async createDebt(organizationId, currentUserId, debtData) {
-    const membership = await this._getActiveMembership(
-      currentUserId,
-      organizationId,
-      [ROLES.ADMIN, ROLES.FINANCIAL_MANAGER],
-    );
+  async getDebts(organizationId, currentUserId, filters = {}) {
+    await this.#requireMembership(currentUserId, organizationId);
 
-    const targetMembership = await prisma.membership.findUnique({
-      where: { id: debtData.membershipId },
+    const {
+      status,
+      membershipId,
+      startDate,
+      endDate,
+      page = 1,
+      limit = 10,
+    } = filters;
+
+    const skip = (page - 1) * limit;
+
+    const where = {
+      organizationId,
+      ...(status && { status }),
+      ...(membershipId && { membershipId }),
+      ...(startDate || endDate
+        ? {
+            dueDate: {
+              ...(startDate && { gte: new Date(startDate) }),
+              ...(endDate && { lte: new Date(endDate) }),
+            },
+          }
+        : {}),
+    };
+
+    const [data, total] = await Promise.all([
+      prisma.debt.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { dueDate: "asc" },
+        include: {
+          membership: {
+            include: {
+              user: {
+                select: {
+                  id: true,
+                  prenom: true,
+                  nom: true,
+                  email: true,
+                  phone: true,
+                  avatar: true,
+                  gender: true,
+                },
+              },
+            },
+          },
+          repayments: {
+            orderBy: { paymentDate: "desc" },
+          },
+        },
+      }),
+      prisma.debt.count({ where }),
+    ]);
+
+    // ✅ Enrichir avec displayInfo
+    const enrichedData = data.map((debt) => {
+      const displayInfo = this.#getMemberDisplayInfo(debt.membership);
+
+      return {
+        ...debt,
+        membership: {
+          ...debt.membership,
+          displayInfo,
+        },
+      };
     });
 
-    if (
-      !targetMembership ||
-      targetMembership.organizationId !== organizationId
-    ) {
-      throw new Error("Membre non valide pour cette organisation");
-    }
+    return {
+      debts: enrichedData,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      },
+    };
+  }
 
-    const initialAmount = this._parseAmount(
-      debtData.initialAmount,
-      "montant initial",
+  async createDebt(organizationId, currentUserId, debtData) {
+    const currentMembership = await this.#requireMembership(
+      currentUserId,
+      organizationId,
+      ["ADMIN", "FINANCIAL_MANAGER"],
     );
+
+    // Vérifier que le membre existe
+    const membership = await prisma.membership.findUnique({
+      where: { id: debtData.membershipId },
+      include: {
+        user: {
+          select: {
+            prenom: true,
+            nom: true,
+          },
+        },
+      },
+    });
+
+    if (!membership || membership.organizationId !== organizationId) {
+      throw new Error("Membre non trouvé dans cette organisation");
+    }
 
     const debt = await prisma.debt.create({
       data: {
-        ...debtData,
+        membershipId: debtData.membershipId,
         organizationId,
-        initialAmount,
-        remainingAmount: initialAmount,
+        title: debtData.title,
+        description: debtData.description,
+        initialAmount: debtData.initialAmount,
+        remainingAmount: debtData.initialAmount,
         dueDate: debtData.dueDate ? new Date(debtData.dueDate) : null,
+        status: "ACTIVE",
       },
       include: {
         membership: {
           include: {
             user: {
               select: {
-                id: true,
                 prenom: true,
                 nom: true,
-                email: true,
-                phone: true,
+                avatar: true,
               },
             },
           },
@@ -105,6 +234,7 @@ export default class DebtService {
       },
     });
 
+    // ✅ Audit log
     await prisma.auditLog.create({
       data: {
         action: "CREATE_DEBT",
@@ -112,16 +242,28 @@ export default class DebtService {
         resourceId: debt.id,
         userId: currentUserId,
         organizationId,
-        membershipId: membership.id,
-        details: {
-          title: debt.title,
-          initialAmount,
-          memberId: debt.membershipId,
-        },
+        membershipId: currentMembership.id,
+        details: JSON.stringify({
+          membershipId: debtData.membershipId,
+          memberName: membership.userId
+            ? `${membership.user?.prenom} ${membership.user?.nom}`
+            : `${membership.provisionalFirstName} ${membership.provisionalLastName}`,
+          isProvisional: !membership.userId,
+          amount: debtData.initialAmount,
+        }),
       },
     });
 
-    return debt;
+    // ✅ Enrichir avec displayInfo
+    const displayInfo = this.#getMemberDisplayInfo(debt.membership);
+
+    return {
+      ...debt,
+      membership: {
+        ...debt.membership,
+        displayInfo,
+      },
+    };
   }
 
   /* =========================
@@ -129,10 +271,10 @@ export default class DebtService {
   ========================= */
 
   async getDebtById(organizationId, debtId, currentUserId) {
-    await this._getActiveMembership(currentUserId, organizationId);
+    await this.#requireMembership(currentUserId, organizationId);
 
-    const debt = await prisma.debt.findUnique({
-      where: { id: debtId },
+    const debt = await prisma.debt.findFirst({
+      where: { id: debtId, organizationId },
       include: {
         membership: {
           include: {
@@ -143,34 +285,32 @@ export default class DebtService {
                 nom: true,
                 email: true,
                 phone: true,
+                avatar: true,
+                gender: true,
               },
             },
           },
         },
         repayments: {
           orderBy: { paymentDate: "desc" },
-          include: {
-            transaction: {
-              include: {
-                wallet: {
-                  // ✅ AJOUT : Wallet lié aux transactions de remboursement
-                  select: {
-                    currentBalance: true,
-                    currency: true,
-                  },
-                },
-              },
-            },
-          },
         },
       },
     });
 
-    if (!debt || debt.organizationId !== organizationId) {
-      throw new Error("Dette introuvable");
+    if (!debt) {
+      throw new Error("Dette non trouvée");
     }
 
-    return debt;
+    // ✅ Enrichir avec displayInfo
+    const displayInfo = this.#getMemberDisplayInfo(debt.membership);
+
+    return {
+      ...debt,
+      membership: {
+        ...debt.membership,
+        displayInfo,
+      },
+    };
   }
 
   /* =========================
@@ -248,13 +388,15 @@ export default class DebtService {
     currentUserId,
     filters = {},
   ) {
-    const currentMembership = await this._getActiveMembership(
+    const currentMembership = await this.#requireMembership(
       currentUserId,
       organizationId,
     );
 
+    // Vérifier les permissions
     if (
-      currentMembership.role !== ROLES.ADMIN &&
+      currentMembership.role !== "ADMIN" &&
+      currentMembership.role !== "FINANCIAL_MANAGER" &&
       currentMembership.id !== membershipId
     ) {
       throw new Error("Permissions insuffisantes");
@@ -274,9 +416,11 @@ export default class DebtService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: "desc" },
+        orderBy: { dueDate: "desc" },
         include: {
-          repayments: { orderBy: { paymentDate: "desc" } },
+          repayments: {
+            orderBy: { paymentDate: "desc" },
+          },
         },
       }),
       prisma.debt.count({ where }),
@@ -289,15 +433,13 @@ export default class DebtService {
       }),
     ]);
 
-    const totalRepaid =
-      (totals._sum.initialAmount || 0) - (totals._sum.remainingAmount || 0);
-
     return {
       debts,
       totals: {
-        totalDebts: totals._sum.initialAmount || 0,
+        totalInitial: totals._sum.initialAmount || 0,
         totalRemaining: totals._sum.remainingAmount || 0,
-        totalRepaid,
+        totalRepaid:
+          (totals._sum.initialAmount || 0) - (totals._sum.remainingAmount || 0),
       },
       pagination: {
         page,
@@ -440,9 +582,6 @@ export default class DebtService {
     return updatedDebt;
   }
 
-  /* =========================
-     DEBT SUMMARY
-  ========================= */
 
   /* =========================
    📊 DEBT SUMMARY AVEC WALLET
