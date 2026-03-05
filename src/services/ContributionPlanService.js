@@ -117,12 +117,83 @@ export default class ContributionPlanService {
     const plan = await prisma.contributionPlan.findFirst({
       where: { id: planId, organizationId },
       include: {
-        _count: { select: { contributions: true } },
+        _count: {
+          select: { contributions: true },
+        },
+        // ✅ AJOUT : Inclure les contributions avec les infos des membres
+        contributions: {
+          include: {
+            membership: {
+              include: {
+                user: {
+                  select: {
+                    id: true,
+                    prenom: true,
+                    nom: true,
+                    email: true,
+                    phone: true,
+                    avatar: true,
+                    gender: true,
+                  },
+                },
+              },
+            },
+          },
+          orderBy: [
+            { status: "asc" }, // PENDING, PAID, etc.
+            { dueDate: "desc" },
+          ],
+        },
       },
     });
 
     if (!plan) throw new Error("Plan de cotisation non trouvé");
-    return plan;
+
+    // ✅ Enrichir chaque contribution avec displayInfo
+    const enrichedContributions = plan.contributions.map((contribution) => {
+      const displayInfo = this.#getMemberDisplayInfo(contribution.membership);
+
+      return {
+        ...contribution,
+        membership: {
+          ...contribution.membership,
+          displayInfo,
+        },
+      };
+    });
+
+    return {
+      ...plan,
+      contributions: enrichedContributions,
+    };
+  }
+
+  #getMemberDisplayInfo(membership) {
+    if (!membership) return null;
+
+    if (membership.userId && membership.user) {
+      return {
+        firstName: membership.user.prenom,
+        lastName: membership.user.nom,
+        email: membership.user.email,
+        phone: membership.user.phone,
+        avatar: membership.user.avatar,
+        gender: membership.user.gender,
+        hasAccount: true,
+        isProvisional: false,
+      };
+    }
+
+    return {
+      firstName: membership.provisionalFirstName,
+      lastName: membership.provisionalLastName,
+      email: membership.provisionalEmail,
+      phone: membership.provisionalPhone,
+      avatar: membership.provisionalAvatar,
+      gender: membership.provisionalGender,
+      hasAccount: false,
+      isProvisional: true,
+    };
   }
 
   async getOrganizationContributionPlans(organizationId, userId, filters = {}) {
@@ -186,11 +257,16 @@ export default class ContributionPlanService {
     const updatePayload = {};
 
     if (updateData.name !== undefined) updatePayload.name = updateData.name;
-    if (updateData.description !== undefined) updatePayload.description = updateData.description;
-    if (updateData.frequency !== undefined) updatePayload.frequency = updateData.frequency;
-    if (updateData.isActive !== undefined) updatePayload.isActive = updateData.isActive;
-    if (updateData.startDate !== undefined) updatePayload.startDate = this.#safeDate(updateData.startDate);
-    if (updateData.endDate !== undefined) updatePayload.endDate = this.#safeDate(updateData.endDate);
+    if (updateData.description !== undefined)
+      updatePayload.description = updateData.description;
+    if (updateData.frequency !== undefined)
+      updatePayload.frequency = updateData.frequency;
+    if (updateData.isActive !== undefined)
+      updatePayload.isActive = updateData.isActive;
+    if (updateData.startDate !== undefined)
+      updatePayload.startDate = this.#safeDate(updateData.startDate);
+    if (updateData.endDate !== undefined)
+      updatePayload.endDate = this.#safeDate(updateData.endDate);
 
     // ✅ Gérer differentiateByGender
     if (updateData.differentiateByGender !== undefined) {
