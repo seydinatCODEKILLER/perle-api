@@ -1,4 +1,5 @@
 import AuthService from "../services/AuthService.js";
+import logger from "../config/logger.js";
 import AuthSchema from "../schemas/AuthSchema.js";
 import { CookieManager } from "../utils/cookie.utils.js";
 
