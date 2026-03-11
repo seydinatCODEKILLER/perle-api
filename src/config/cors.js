@@ -15,6 +15,7 @@ export const corsConfig = {
   production: {
     origin: [
       env.FRONTEND_URL_PROD,
+      "http://localhost:3000",
     ].filter(Boolean),
     credentials: true,
   },
