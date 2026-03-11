@@ -165,6 +165,17 @@ export default class AuthController {
 
       const result = await this.service.refreshAccessToken(refreshToken);
 
+      // ✅ Vérification robuste avant d'accéder à result.user
+      if (!result) {
+        logger.error("❌ Service returned null/undefined");
+        throw new Error("Erreur lors du refresh");
+      }
+
+      if (!result.user) {
+        logger.error("❌ Service returned no user data:", result);
+        throw new Error("Données utilisateur manquantes");
+      }
+
       logger.info(
         `✅ Service returned new access token for user: ${result.user.id}`,
       );
@@ -176,6 +187,7 @@ export default class AuthController {
       return res.success({ user: result.user }, "Token rafraîchi avec succès");
     } catch (error) {
       logger.error(`❌ ERREUR REFRESH TOKEN: ${error.message}`);
+      logger.error(`Stack: ${error.stack}`);
 
       CookieManager.clearAuthCookies(res);
 

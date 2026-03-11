@@ -17,7 +17,8 @@ export default class AuthService {
    * ✅ Inscription avec synchronisation automatique des membres provisoires
    */
   async register(userData) {
-    const { prenom, nom, email, password, phone, gender, avatarFile } = userData;
+    const { prenom, nom, email, password, phone, gender, avatarFile } =
+      userData;
 
     let avatarUrl = null;
     let avatarPrefix = null;
@@ -85,7 +86,10 @@ export default class AuthService {
       });
 
       // ✅ NOUVEAU: Synchroniser les membres provisoires avec ce téléphone
-      const linkedMemberships = await this.#linkProvisionalMembers(phone, user.id);
+      const linkedMemberships = await this.#linkProvisionalMembers(
+        phone,
+        user.id,
+      );
 
       // Générer les tokens
       const { accessToken, refreshToken } = await this.generateTokens(user);
@@ -190,7 +194,7 @@ export default class AuthService {
           });
 
           return updated;
-        })
+        }),
       );
 
       return {
@@ -206,7 +210,10 @@ export default class AuthService {
         })),
       };
     } catch (error) {
-      console.error("Erreur lors de la synchronisation des membres provisoires:", error);
+      console.error(
+        "Erreur lors de la synchronisation des membres provisoires:",
+        error,
+      );
       // On ne bloque pas l'inscription même si le lien échoue
       // L'admin pourra le faire manuellement si nécessaire
       return {
@@ -468,30 +475,51 @@ export default class AuthService {
     return { accessToken, refreshToken };
   }
 
+  // services/AuthService.js
+
   /**
    * Rafraîchit l'access token avec un refresh token
    */
   async refreshAccessToken(refreshToken) {
+    console.log("🔄 refreshAccessToken called");
+
     const tokenRecord = await prisma.refreshToken.findUnique({
       where: { token: refreshToken },
       include: { user: true },
     });
 
+    console.log("🔍 Token record found:", {
+      exists: !!tokenRecord,
+      hasUser: !!tokenRecord?.user,
+      userId: tokenRecord?.user?.id,
+    });
+
     if (!tokenRecord) {
+      console.error("❌ Token not found in database");
       throw new Error("Refresh token invalide");
     }
 
     if (tokenRecord.isRevoked) {
+      console.error("❌ Token is revoked");
       throw new Error("Refresh token révoqué");
     }
 
     if (new Date() > tokenRecord.expiresAt) {
+      console.error("❌ Token expired:", tokenRecord.expiresAt);
       throw new Error("Refresh token expiré");
     }
 
+    if (!tokenRecord.user) {
+      console.error("❌ No user found in token record");
+      throw new Error("Utilisateur introuvable");
+    }
+
     if (!tokenRecord.user.isActive) {
+      console.error("❌ User is inactive");
       throw new Error("Compte utilisateur inactif");
     }
+
+    console.log("✅ User found:", tokenRecord.user.email);
 
     // Générer un nouvel access token
     const accessToken = this.tokenGenerator.sign({
@@ -503,7 +531,26 @@ export default class AuthService {
       canCreateOrganization: tokenRecord.user.canCreateOrganization,
     });
 
-    return { accessToken };
+    console.log("✅ New access token generated");
+
+    // ✅ FIX: Retourner AUSSI le user
+    return {
+      accessToken,
+      user: {
+        id: tokenRecord.user.id,
+        prenom: tokenRecord.user.prenom,
+        nom: tokenRecord.user.nom,
+        email: tokenRecord.user.email,
+        phone: tokenRecord.user.phone,
+        role: tokenRecord.user.role,
+        gender: tokenRecord.user.gender,
+        avatar: tokenRecord.user.avatar,
+        isActive: tokenRecord.user.isActive,
+        canCreateOrganization: tokenRecord.user.canCreateOrganization,
+        createdAt: tokenRecord.user.createdAt,
+        lastLoginAt: tokenRecord.user.lastLoginAt,
+      },
+    };
   }
 
   /**
