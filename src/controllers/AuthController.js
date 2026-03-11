@@ -2,6 +2,7 @@ import AuthService from "../services/AuthService.js";
 import logger from "../config/logger.js";
 import AuthSchema from "../schemas/AuthSchema.js";
 import { CookieManager } from "../utils/cookie.utils.js";
+import { COOKIE_CONFIG } from "../config/cookie.config.js";
 
 export default class AuthController {
   constructor() {
