@@ -24,6 +24,20 @@ import swaggerUi from "swagger-ui-express";
 import { swaggerOptions } from "./config/swagger.js";
 
 const app = express();
+app.use((req, res, next) => {
+  console.log("\n📥 ==================== INCOMING REQUEST ====================");
+  console.log("Time:", new Date().toISOString());
+  console.log("Method:", req.method);
+  console.log("Path:", req.path);
+  console.log("Full URL:", req.url);
+  console.log("\nHeaders:");
+  console.log("- Origin:", req.headers.origin);
+  console.log("- Cookie:", req.headers.cookie || "NONE");
+  console.log("- Authorization:", req.headers.authorization || "NONE");
+  console.log("- User-Agent:", req.headers["user-agent"]?.substring(0, 60) + "...");
+  console.log("===========================================================\n");
+  next();
+});
 const specs = swaggerJSDoc(swaggerOptions);
 
 // ✅ Middlewares globaux dans le bon ordre

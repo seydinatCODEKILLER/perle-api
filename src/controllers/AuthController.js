@@ -44,10 +44,16 @@ export default class AuthController {
 
       const result = await this.service.login(phone, password);
 
-      // ✅ Définir les cookies
+      logger.info("🔐 ==================== LOGIN SUCCESS ====================");
+      logger.info(`User: ${result.user.email || result.user.phone}`);
+      logger.info(
+        `Setting cookies with config: secure=${COOKIE_CONFIG.ACCESS_TOKEN.secure}, sameSite=${COOKIE_CONFIG.ACCESS_TOKEN.sameSite}`,
+      );
+
       CookieManager.setAuthTokens(res, result.accessToken, result.refreshToken);
 
-      // ✅ Ne pas renvoyer les tokens dans le body
+      logger.info("✅ Cookies set in response headers");
+
       const { accessToken, refreshToken, ...userData } = result;
 
       return res.success(userData, "Connexion réussie");
@@ -65,7 +71,7 @@ export default class AuthController {
     try {
       // ✅ Récupérer le refresh token depuis les cookies
       const refreshToken = CookieManager.getRefreshToken(req);
-      
+
       if (refreshToken) {
         await this.service.logout(refreshToken);
       }
@@ -132,27 +138,45 @@ export default class AuthController {
 
   async refreshToken(req, res) {
     try {
-      // ✅ Récupérer le refresh token depuis les cookies
+      logger.info(
+        "🔄 ==================== REFRESH TOKEN REQUEST ====================",
+      );
+      logger.info(
+        `Headers: ${JSON.stringify({
+          origin: req.headers.origin,
+          cookie: req.headers.cookie,
+        })}`,
+      );
+      logger.info(`Parsed Cookies: ${JSON.stringify(req.cookies)}`);
+
       const refreshToken = CookieManager.getRefreshToken(req);
 
+      logger.info(`Refresh Token Found: ${!!refreshToken}`);
+
       if (!refreshToken) {
+        logger.error("❌ REFRESH TOKEN MANQUANT !");
+        logger.error(`Available cookies: ${Object.keys(req.cookies || {})}`);
         return res.error("Refresh token requis", 400);
       }
 
+      logger.info("✅ Refresh token trouvé, calling service...");
+
       const result = await this.service.refreshAccessToken(refreshToken);
 
-      // ✅ Mettre à jour le cookie d'access token
+      logger.info(
+        `✅ Service returned new access token for user: ${result.user.id}`,
+      );
+
       CookieManager.setAccessToken(res, result.accessToken);
 
-      // ✅ Ne pas renvoyer le token dans le body
-      return res.success(
-        { user: result.user },
-        "Token rafraîchi avec succès"
-      );
+      logger.info("✅ New access token cookie set");
+
+      return res.success({ user: result.user }, "Token rafraîchi avec succès");
     } catch (error) {
-      // ✅ Supprimer les cookies en cas d'erreur
+      logger.error(`❌ ERREUR REFRESH TOKEN: ${error.message}`);
+
       CookieManager.clearAuthCookies(res);
-      
+
       const statusCode =
         error.message.includes("invalide") ||
         error.message.includes("révoqué") ||
