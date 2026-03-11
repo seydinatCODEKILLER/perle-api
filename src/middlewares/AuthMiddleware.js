@@ -1,5 +1,6 @@
 import TokenGenerator from "../config/jwt.js";
 import { prisma } from "../config/database.js";
+import { CookieManager } from "../utils/cookie.utils.js";
 
 export default class AuthMiddleware {
   constructor() {
@@ -11,10 +12,11 @@ export default class AuthMiddleware {
       try {
         let token;
 
-        if (
-          req.headers.authorization &&
-          req.headers.authorization.startsWith("Bearer")
-        ) {
+        // ✅ Priorité 1: Vérifier les cookies
+        token = CookieManager.getAccessToken(req);
+
+        // ✅ Priorité 2: Vérifier le header Authorization (pour Postman, mobile, etc.)
+        if (!token && req.headers.authorization?.startsWith("Bearer")) {
           token = req.headers.authorization.split(" ")[1];
         }
 
@@ -49,6 +51,8 @@ export default class AuthMiddleware {
         req.user = currentUser;
         next();
       } catch (error) {
+        // ✅ Supprimer les cookies si le token est invalide
+        CookieManager.clearAuthCookies(res);
         return res.error("Token invalide.", 401);
       }
     };

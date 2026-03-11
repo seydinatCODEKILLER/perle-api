@@ -1,8 +1,11 @@
+// config/rateLimiter.js
+
 import rateLimit from "express-rate-limit";
 
 /**
- * Rate limiter général pour toutes les routes API
+ * Rate limiter général pour routes publiques
  * 100 requêtes par 15 minutes par IP
+ * Utilise MemoryStore (par défaut, gratuit)
  */
 export const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -11,13 +14,23 @@ export const generalLimiter = rateLimit({
     success: false,
     message: "Trop de requêtes, veuillez réessayer plus tard",
   },
-  standardHeaders: true,
-  legacyHeaders: false,
+  standardHeaders: true, // Retourne info dans les headers `RateLimit-*`
+  legacyHeaders: false, // Désactive les headers `X-RateLimit-*`
+  
+  // ✅ Exempter les routes de vérification de session
+  skip: (req) => {
+    const exemptedPaths = [
+      "/auth/me",
+      "/auth/refresh-token",
+      "/auth/refresh",
+    ];
+    return exemptedPaths.some(path => req.path.endsWith(path));
+  },
 });
 
 /**
- * Rate limiter strict pour les routes d'authentification
- * Protège contre les attaques brute force
+ * Rate limiter strict pour login
+ * Protection contre les attaques brute force
  * 5 tentatives par 15 minutes par IP
  */
 export const authLimiter = rateLimit({
@@ -27,7 +40,7 @@ export const authLimiter = rateLimit({
     success: false,
     message: "Trop de tentatives de connexion. Réessayez dans 15 minutes",
   },
-  skipSuccessfulRequests: false, // Compte toutes les requêtes
+  skipSuccessfulRequests: false, // Compte toutes les requêtes (même réussies)
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -50,11 +63,11 @@ export const registerLimiter = rateLimit({
 
 /**
  * Rate limiter pour le refresh token
- * 10 requêtes par 15 minutes
+ * 30 requêtes par 15 minutes (permet plusieurs onglets + erreurs)
  */
 export const refreshTokenLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10,
+  max: 30, // 30 requêtes max
   message: {
     success: false,
     message: "Trop de tentatives de rafraîchissement de token",
@@ -69,7 +82,7 @@ export const refreshTokenLimiter = rateLimit({
  */
 export const uploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 heure
-  max: 20,
+  max: 20, // 20 uploads max
   message: {
     success: false,
     message: "Trop d'uploads. Réessayez plus tard",
@@ -80,11 +93,11 @@ export const uploadLimiter = rateLimit({
 
 /**
  * Rate limiter pour les opérations CRUD courantes
- * 50 requêtes par 15 minutes
+ * 200 requêtes par 15 minutes (augmenté pour usage normal)
  */
 export const crudLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 50,
+  max: 200, // 200 requêtes max
   message: {
     success: false,
     message: "Trop de requêtes. Veuillez ralentir",

@@ -2,6 +2,7 @@ import express from "express";
 import AuthController from "../controllers/AuthController.js";
 import AuthMiddleware from "../middlewares/AuthMiddleware.js";
 import upload from "../config/multer.js";
+import { authLimiter, refreshTokenLimiter, registerLimiter } from "../config/rateLimiter.js";
 
 export default class AuthRoutes {
   constructor() {
@@ -247,7 +248,7 @@ export default class AuthRoutes {
      *             schema:
      *               $ref: '#/components/schemas/Error'
      */
-    this.router.post("/register", upload.single("avatar"), (req, res) =>
+    this.router.post("/register",registerLimiter, upload.single("avatar"), (req, res) =>
       this.controller.register(req, res),
     );
 
@@ -294,7 +295,7 @@ export default class AuthRoutes {
      *             schema:
      *               $ref: '#/components/schemas/Error'
      */
-    this.router.post("/login", (req, res) => this.controller.login(req, res));
+    this.router.post("/login",authLimiter, (req, res) => this.controller.login(req, res));
 
     /**
      * @swagger
@@ -334,7 +335,7 @@ export default class AuthRoutes {
      *             schema:
      *               $ref: '#/components/schemas/Error'
      */
-    this.router.post("/refresh-token", (req, res) =>
+    this.router.post("/refresh-token",  refreshTokenLimiter, (req, res) =>
       this.controller.refreshToken(req, res),
     );
 

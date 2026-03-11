@@ -1,5 +1,6 @@
 import AuthService from "../services/AuthService.js";
 import AuthSchema from "../schemas/AuthSchema.js";
+import { CookieManager } from "../utils/cookie.utils.js";
 
 export default class AuthController {
   constructor() {
@@ -24,7 +25,13 @@ export default class AuthController {
         avatarFile,
       });
 
-      return res.success(result, "Inscription réussie", 201);
+      // ✅ Définir les cookies
+      CookieManager.setAuthTokens(res, result.accessToken, result.refreshToken);
+
+      // ✅ Ne pas renvoyer les tokens dans le body
+      const { accessToken, refreshToken, ...userData } = result;
+
+      return res.success(userData, "Inscription réussie", 201);
     } catch (error) {
       return res.error(error.message, 400);
     }
@@ -32,13 +39,18 @@ export default class AuthController {
 
   async login(req, res) {
     try {
-      // Validation des données
       this.schema.validateLogin(req.body);
       const { phone, password } = req.body;
 
       const result = await this.service.login(phone, password);
 
-      return res.success(result, "Connexion réussie");
+      // ✅ Définir les cookies
+      CookieManager.setAuthTokens(res, result.accessToken, result.refreshToken);
+
+      // ✅ Ne pas renvoyer les tokens dans le body
+      const { accessToken, refreshToken, ...userData } = result;
+
+      return res.success(userData, "Connexion réussie");
     } catch (error) {
       const statusCode = error.message.includes("incorrect")
         ? 401
@@ -51,10 +63,20 @@ export default class AuthController {
 
   async logout(req, res) {
     try {
-      const { refreshToken } = req.body;
-      const result = await this.service.logout(refreshToken);
-      return res.success(result, "Déconnexion réussie");
+      // ✅ Récupérer le refresh token depuis les cookies
+      const refreshToken = CookieManager.getRefreshToken(req);
+      
+      if (refreshToken) {
+        await this.service.logout(refreshToken);
+      }
+
+      // ✅ Supprimer les cookies
+      CookieManager.clearAuthCookies(res);
+
+      return res.success(null, "Déconnexion réussie");
     } catch (error) {
+      // ✅ Toujours supprimer les cookies même en cas d'erreur
+      CookieManager.clearAuthCookies(res);
       return res.error("Erreur lors de la déconnexion", 500);
     }
   }
@@ -110,7 +132,8 @@ export default class AuthController {
 
   async refreshToken(req, res) {
     try {
-      const { refreshToken } = req.body;
+      // ✅ Récupérer le refresh token depuis les cookies
+      const refreshToken = CookieManager.getRefreshToken(req);
 
       if (!refreshToken) {
         return res.error("Refresh token requis", 400);
@@ -118,8 +141,18 @@ export default class AuthController {
 
       const result = await this.service.refreshAccessToken(refreshToken);
 
-      return res.success(result, "Token rafraîchi avec succès");
+      // ✅ Mettre à jour le cookie d'access token
+      CookieManager.setAccessToken(res, result.accessToken);
+
+      // ✅ Ne pas renvoyer le token dans le body
+      return res.success(
+        { user: result.user },
+        "Token rafraîchi avec succès"
+      );
     } catch (error) {
+      // ✅ Supprimer les cookies en cas d'erreur
+      CookieManager.clearAuthCookies(res);
+      
       const statusCode =
         error.message.includes("invalide") ||
         error.message.includes("révoqué") ||
@@ -135,6 +168,9 @@ export default class AuthController {
       const userId = req.user.id;
       const result = await this.service.revokeAllUserTokens(userId);
 
+      // ✅ Supprimer les cookies
+      CookieManager.clearAuthCookies(res);
+
       return res.success(result, result.message);
     } catch (error) {
       return res.error(error.message, 400);
@@ -143,13 +179,17 @@ export default class AuthController {
 
   async revokeRefreshToken(req, res) {
     try {
-      const { refreshToken } = req.body;
+      // ✅ Récupérer le refresh token depuis les cookies
+      const refreshToken = CookieManager.getRefreshToken(req);
 
       if (!refreshToken) {
         return res.error("Refresh token requis", 400);
       }
 
       const result = await this.service.revokeRefreshToken(refreshToken);
+
+      // ✅ Supprimer les cookies
+      CookieManager.clearAuthCookies(res);
 
       return res.success(result, result.message);
     } catch (error) {
