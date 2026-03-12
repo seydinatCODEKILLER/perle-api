@@ -1,4 +1,4 @@
-// config/cors.config.js
+
 
 import { env } from "./env.js";
 
@@ -16,9 +16,9 @@ export const corsConfig = {
   production: {
     origin: [
       env.FRONTEND_URL_PROD,
-      "http://localhost:5173", // ✅ Ajouté pour tester
+      "http://localhost:5173",
       "http://localhost:3000",
-      "http://127.0.0.1:5173", // ✅ Ajouté aussi
+      "http://127.0.0.1:5173",
     ].filter(Boolean),
     credentials: true,
   },
@@ -29,7 +29,6 @@ export const getCorsOptions = () => {
 
   return {
     origin: (origin, callback) => {
-      // ✅ Debug logs
       console.log("🔍 CORS Check - Origin:", origin);
       console.log("🔍 Allowed origins:", config.origin);
       

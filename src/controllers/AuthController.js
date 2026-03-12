@@ -140,24 +140,10 @@ export default class AuthController {
 
   async refreshToken(req, res) {
     try {
-      logger.info(
-        "🔄 ==================== REFRESH TOKEN REQUEST ====================",
-      );
-      logger.info(
-        `Headers: ${JSON.stringify({
-          origin: req.headers.origin,
-          cookie: req.headers.cookie,
-        })}`,
-      );
-      logger.info(`Parsed Cookies: ${JSON.stringify(req.cookies)}`);
 
       const refreshToken = CookieManager.getRefreshToken(req);
 
-      logger.info(`Refresh Token Found: ${!!refreshToken}`);
-
       if (!refreshToken) {
-        logger.error("❌ REFRESH TOKEN MANQUANT !");
-        logger.error(`Available cookies: ${Object.keys(req.cookies || {})}`);
         return res.error("Refresh token requis", 400);
       }
 
@@ -165,7 +151,6 @@ export default class AuthController {
 
       const result = await this.service.refreshAccessToken(refreshToken);
 
-      // ✅ Vérification robuste avant d'accéder à result.user
       if (!result) {
         logger.error("❌ Service returned null/undefined");
         throw new Error("Erreur lors du refresh");
@@ -175,10 +160,6 @@ export default class AuthController {
         logger.error("❌ Service returned no user data:", result);
         throw new Error("Données utilisateur manquantes");
       }
-
-      logger.info(
-        `✅ Service returned new access token for user: ${result.user.id}`,
-      );
 
       CookieManager.setAccessToken(res, result.accessToken);
 

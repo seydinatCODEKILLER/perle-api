@@ -26,6 +26,27 @@ import { swaggerOptions } from "./config/swagger.js";
 const app = express();
 const specs = swaggerJSDoc(swaggerOptions);
 
+// ✅ CRITICAL: Trust proxy EN PREMIER (avant TOUS les middlewares)
+app.set("trust proxy", 1);
+
+// Debug middleware pour voir les IPs
+app.use((req, res, next) => {
+  const forwarded = req.headers['x-forwarded-for'];
+  const realIp = req.headers['x-real-ip'];
+  const ip = req.ip;
+  
+  if (import.meta.env?.DEV || process.env.NODE_ENV !== 'production') {
+    console.log("📍 IP Info:", {
+      'x-forwarded-for': forwarded,
+      'x-real-ip': realIp,
+      'req.ip': ip,
+      path: req.path
+    });
+  }
+  
+  next();
+});
+
 // ✅ Middlewares globaux dans le bon ordre
 app.use(cors(getCorsOptions()));
 app.use(cookieParser());
