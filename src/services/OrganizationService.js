@@ -717,6 +717,98 @@ export default class OrganizationService {
     }
   }
 
+  async updateWallet(organizationId, userId, walletData) {
+    const [organization, membership] = await Promise.all([
+      prisma.organization.findUnique({
+        where: { id: organizationId },
+        include: { wallet: true },
+      }),
+      prisma.membership.findFirst({
+        where: {
+          userId,
+          organizationId,
+          status: "ACTIVE",
+          role: { in: ["ADMIN"] },
+        },
+      }),
+    ]);
+
+    if (!organization) {
+      throw new Error("Organisation non trouvée");
+    }
+
+    if (!membership && organization.ownerId !== userId) {
+      throw new Error(
+        "Permissions insuffisantes pour modifier le portefeuille",
+      );
+    }
+
+    if (!organization.wallet) {
+      throw new Error("Cette organisation n'a pas de portefeuille");
+    }
+
+    const previousState = {
+      currentBalance: organization.wallet.currentBalance,
+      initialBalance: organization.wallet.initialBalance,
+      totalIncome: organization.wallet.totalIncome,
+      totalExpenses: organization.wallet.totalExpenses,
+    };
+
+    try {
+      const result = await prisma.$transaction(async (tx) => {
+        // Mise à jour du wallet
+        const updatedWallet = await tx.organizationWallet.update({
+          where: { organizationId },
+          data: {
+            ...(walletData.initialBalance !== undefined && {
+              initialBalance: parseFloat(walletData.initialBalance),
+            }),
+            ...(walletData.currentBalance !== undefined && {
+              currentBalance: parseFloat(walletData.currentBalance),
+            }),
+            ...(walletData.totalIncome !== undefined && {
+              totalIncome: parseFloat(walletData.totalIncome),
+            }),
+            ...(walletData.totalExpenses !== undefined && {
+              totalExpenses: parseFloat(walletData.totalExpenses),
+            }),
+          },
+        });
+
+        // Audit log
+        await tx.auditLog.create({
+          data: {
+            organizationId,
+            userId,
+            action: "UPDATE_WALLET",
+            resource: "OrganizationWallet",
+            resourceId: updatedWallet.id,
+            details: {
+              previousState,
+              newState: {
+                currentBalance: updatedWallet.currentBalance,
+                initialBalance: updatedWallet.initialBalance,
+                totalIncome: updatedWallet.totalIncome,
+                totalExpenses: updatedWallet.totalExpenses,
+              },
+              updatedFields: Object.keys(walletData),
+              updatedAt: new Date().toISOString(),
+            },
+          },
+        });
+
+        return updatedWallet;
+      });
+
+      return result;
+    } catch (error) {
+      console.error("Erreur lors de la mise à jour du wallet:", error);
+      throw new Error(
+        `Impossible de mettre à jour le portefeuille: ${error.message}`,
+      );
+    }
+  }
+
   // Méthodes utilitaires privées
   #generateLoginId() {
     return Math.random().toString(36).substring(2, 10).toUpperCase();

@@ -1,4 +1,3 @@
-// services/walletService.js
 import { prisma } from "../config/database.js";
 
 export default class WalletService {

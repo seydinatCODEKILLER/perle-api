@@ -205,4 +205,19 @@ export default class OrganizationController {
       return res.error(error.message, statusCode);
     }
   }
+
+  async updateWallet(req, res) {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    this.schema.validateWalletUpdate(req.body);
+    const wallet = await this.service.updateWallet(id, userId, req.body);
+
+    return res.success(wallet, "Portefeuille mis à jour avec succès");
+  } catch (error) {
+    const statusCode = error.message.includes("Permissions") ? 403 : 400;
+    return res.error(error.message, statusCode);
+  }
+}
 }

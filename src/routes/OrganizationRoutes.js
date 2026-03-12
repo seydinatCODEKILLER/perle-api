@@ -14,7 +14,6 @@ export default class OrganizationRoutes {
   }
 
   setupRoutes() {
-    // Routes protégées
     this.router.use(this.authMiddleware.protect());
 
     /**
@@ -469,6 +468,93 @@ export default class OrganizationRoutes {
      */
     this.router.patch("/:id/reactivate", (req, res) =>
       this.controller.reactivateOrganization(req, res),
+    );
+
+    /**
+     * @swagger
+     * /api/organizations/{id}/wallet:
+     *   patch:
+     *     summary: Mettre à jour le portefeuille d'une organisation
+     *     tags: [Organizations, Wallet]
+     *     security:
+     *       - bearerAuth: []
+     *     description: |
+     *       Met à jour les champs du portefeuille (currentBalance, initialBalance, totalIncome, totalExpenses).
+     *       Seuls les ADMINs et le propriétaire peuvent effectuer cette opération.
+     *       ⚠️ ATTENTION : À utiliser uniquement pour des ajustements manuels.
+     *       Pour les opérations normales (contributions, dépenses), utilisez les endpoints dédiés.
+     *     parameters:
+     *       - in: path
+     *         name: id
+     *         required: true
+     *         schema:
+     *           type: string
+     *         description: ID de l'organisation
+     *     requestBody:
+     *       required: true
+     *       content:
+     *         application/json:
+     *           schema:
+     *             type: object
+     *             properties:
+     *               currentBalance:
+     *                 type: number
+     *                 description: "Nouveau solde actuel"
+     *                 example: 50000
+     *               initialBalance:
+     *                 type: number
+     *                 description: "Nouveau solde initial"
+     *                 example: 100000
+     *               totalIncome:
+     *                 type: number
+     *                 description: "Total des revenus"
+     *                 example: 500000
+     *               totalExpenses:
+     *                 type: number
+     *                 description: "Total des dépenses"
+     *                 example: 450000
+     *     responses:
+     *       200:
+     *         description: Portefeuille mis à jour avec succès
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 success:
+     *                   type: boolean
+     *                   example: true
+     *                 message:
+     *                   type: string
+     *                   example: "Portefeuille mis à jour avec succès"
+     *                 data:
+     *                   type: object
+     *                   properties:
+     *                     id:
+     *                       type: string
+     *                     organizationId:
+     *                       type: string
+     *                     currentBalance:
+     *                       type: number
+     *                     initialBalance:
+     *                       type: number
+     *                     totalIncome:
+     *                       type: number
+     *                     totalExpenses:
+     *                       type: number
+     *                     currency:
+     *                       type: string
+     *       400:
+     *         description: Données invalides
+     *       403:
+     *         description: Permissions insuffisantes
+     *       404:
+     *         description: Organisation ou portefeuille non trouvé
+     *       401:
+     *         description: Non authentifié
+     */
+    this.router.patch("/:id/wallet", (req, res) =>
+      this.controller.updateWallet(req, res),
     );
 
     /**

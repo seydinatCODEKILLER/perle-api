@@ -79,6 +79,71 @@ export default class OrganizationSchema {
     this.#validateSchema(schema, data);
   }
 
+  validateWalletUpdate(data) {
+    const schema = z
+      .object({
+        currentBalance: z
+          .number({
+            invalid_type_error: "Le solde actuel doit être un nombre",
+          })
+          .nonnegative({
+            message: "Le solde actuel ne peut pas être négatif",
+          })
+          .optional(),
+
+        initialBalance: z
+          .number({
+            invalid_type_error: "Le solde initial doit être un nombre",
+          })
+          .nonnegative({
+            message: "Le solde initial ne peut pas être négatif",
+          })
+          .optional(),
+
+        totalIncome: z
+          .number({
+            invalid_type_error: "Le total des revenus doit être un nombre",
+          })
+          .nonnegative({
+            message: "Le total des revenus ne peut pas être négatif",
+          })
+          .optional(),
+
+        totalExpenses: z
+          .number({
+            invalid_type_error: "Le total des dépenses doit être un nombre",
+          })
+          .nonnegative({
+            message: "Le total des dépenses ne peut pas être négatif",
+          })
+          .optional(),
+      })
+      .strict({
+        message: "Champs non autorisés dans la requête",
+      })
+      .refine((data) => Object.keys(data).length > 0, {
+        message: "Au moins un champ doit être fourni pour la mise à jour",
+      })
+      .refine(
+        (data) => {
+          // Validation logique : totalExpenses <= totalIncome
+          if (
+            data.totalIncome !== undefined &&
+            data.totalExpenses !== undefined
+          ) {
+            return data.totalExpenses <= data.totalIncome;
+          }
+          return true;
+        },
+        {
+          message:
+            "Le total des dépenses ne peut pas dépasser le total des revenus",
+        },
+      );
+
+    this.#validateSchema(schema, data);
+  }
+
   #validateSchema(schema, data) {
     const result = schema.safeParse(data);
     if (!result.success) {
