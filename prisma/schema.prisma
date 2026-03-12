@@ -108,6 +108,7 @@ enum PaymentMethod {
   BANK_TRANSFER
   CHECK
   CREDIT_CARD
+  INTERNAL
 }
 
 enum PaymentStatus {
