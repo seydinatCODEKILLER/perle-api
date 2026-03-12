@@ -18,7 +18,7 @@ export default class OrganizationController {
       const organization = await this.service.createOrganization(
         ownerId,
         req.body,
-        logoFile
+        logoFile,
       );
 
       return res.success(organization, "Organisation créée avec succès", 201);
@@ -66,7 +66,7 @@ export default class OrganizationController {
         id,
         userId,
         req.body,
-        logoFile
+        logoFile,
       );
 
       return res.success(organization, "Organisation mise à jour avec succès");
@@ -87,7 +87,7 @@ export default class OrganizationController {
       const settings = await this.service.updateOrganizationSettings(
         id,
         userId,
-        req.body
+        req.body,
       );
 
       return res.success(settings, "Paramètres mis à jour avec succès");
@@ -104,7 +104,7 @@ export default class OrganizationController {
 
       const organization = await this.service.deactivateOrganization(
         id,
-        userId
+        userId,
       );
 
       return res.success(organization, "Organisation désactivée avec succès");
@@ -121,13 +121,13 @@ export default class OrganizationController {
 
       const organization = await this.service.reactivateOrganization(
         id,
-        userId
+        userId,
       );
 
       return res.success(
         organization,
         "Organisation réactivée avec succès",
-        200
+        200,
       );
     } catch (error) {
       return res.error(error.message, 400);
@@ -158,7 +158,7 @@ export default class OrganizationController {
         search,
         type,
         parseInt(page) || 1,
-        parseInt(limit) || 10
+        parseInt(limit) || 10,
       );
 
       return res.success(result, "Recherche effectuée avec succès");
@@ -175,15 +175,34 @@ export default class OrganizationController {
       const result = await this.service.getInactiveOrganizations(
         userId,
         parseInt(page) || 1,
-        parseInt(limit) || 10
+        parseInt(limit) || 10,
       );
 
       return res.success(
         result,
-        "Organisations inactives récupérées avec succès"
+        "Organisations inactives récupérées avec succès",
       );
     } catch (error) {
       return res.error(error.message, 400);
+    }
+  }
+
+  async settleWallet(req, res) {
+    try {
+      const { id } = req.params;
+      const userId = req.user.id;
+
+      const result = await this.service.settleWallet(id, userId);
+
+      return res.success(result, "Portefeuille soldé avec succès", 200);
+    } catch (error) {
+      const statusCode = error.message.includes("propriétaire")
+        ? 403
+        : error.message.includes("non trouvée")
+          ? 404
+          : 400;
+
+      return res.error(error.message, statusCode);
     }
   }
 }

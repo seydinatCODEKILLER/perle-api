@@ -470,6 +470,112 @@ export default class OrganizationRoutes {
     this.router.patch("/:id/reactivate", (req, res) =>
       this.controller.reactivateOrganization(req, res),
     );
+
+    /**
+     * @swagger
+     * /api/organizations/{id}/wallet/settle:
+     *   patch:
+     *     summary: Solder le portefeuille d'une organisation (remettre à 0)
+     *     tags: [Organizations, Wallet]
+     *     security:
+     *       - bearerAuth: []
+     *     description: |
+     *       Remet le solde du portefeuille à 0. Seul le propriétaire peut effectuer cette opération.
+     *       L'historique (totalIncome, totalExpenses, initialBalance) est conservé.
+     *       Une transaction de type WALLET_SETTLEMENT et un audit log sont créés automatiquement.
+     *     parameters:
+     *       - in: path
+     *         name: id
+     *         required: true
+     *         schema:
+     *           type: string
+     *         description: ID de l'organisation
+     *     responses:
+     *       200:
+     *         description: Portefeuille soldé avec succès
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 success:
+     *                   type: boolean
+     *                   example: true
+     *                 message:
+     *                   type: string
+     *                   example: "Portefeuille soldé avec succès"
+     *                 data:
+     *                   type: object
+     *                   properties:
+     *                     wallet:
+     *                       type: object
+     *                       properties:
+     *                         id:
+     *                           type: string
+     *                         organizationId:
+     *                           type: string
+     *                         currentBalance:
+     *                           type: number
+     *                           example: 0
+     *                         initialBalance:
+     *                           type: number
+     *                           example: 100000
+     *                         totalIncome:
+     *                           type: number
+     *                           example: 500000
+     *                         totalExpenses:
+     *                           type: number
+     *                           example: 450000
+     *                         currency:
+     *                           type: string
+     *                           example: "XOF"
+     *                     previousBalance:
+     *                       type: number
+     *                       example: 50000
+     *                       description: "Solde avant le règlement"
+     *                     newBalance:
+     *                       type: number
+     *                       example: 0
+     *                     currency:
+     *                       type: string
+     *                       example: "XOF"
+     *                     message:
+     *                       type: string
+     *                       example: "Portefeuille soldé avec succès. Solde précédent: 50000 XOF"
+     *       400:
+     *         description: Erreur (portefeuille déjà soldé, pas de portefeuille, etc.)
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 success:
+     *                   type: boolean
+     *                   example: false
+     *                 message:
+     *                   type: string
+     *                   example: "Le portefeuille est déjà soldé (solde = 0)"
+     *       403:
+     *         description: Permissions insuffisantes (pas le propriétaire)
+     *         content:
+     *           application/json:
+     *             schema:
+     *               type: object
+     *               properties:
+     *                 success:
+     *                   type: boolean
+     *                   example: false
+     *                 message:
+     *                   type: string
+     *                   example: "Seul le propriétaire peut solder le portefeuille"
+     *       404:
+     *         description: Organisation non trouvée
+     *       401:
+     *         description: Non authentifié
+     */
+    this.router.patch("/:id/wallet/settle", (req, res) =>
+      this.controller.settleWallet(req, res),
+    );
   }
 
   get routes() {

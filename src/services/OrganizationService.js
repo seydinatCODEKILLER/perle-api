@@ -625,6 +625,98 @@ export default class OrganizationService {
     };
   }
 
+  async settleWallet(organizationId, userId) {
+    const organization = await prisma.organization.findUnique({
+      where: { id: organizationId },
+      include: {
+        owner: true,
+        wallet: true,
+      },
+    });
+
+    if (!organization) {
+      throw new Error("Organisation non trouvée");
+    }
+
+    if (organization.ownerId !== userId) {
+      throw new Error("Seul le propriétaire peut solder le portefeuille");
+    }
+
+    if (!organization.wallet) {
+      throw new Error("Cette organisation n'a pas de portefeuille");
+    }
+
+    // 2. Vérifier que le wallet n'est pas déjà à 0
+    if (organization.wallet.currentBalance === 0) {
+      throw new Error("Le portefeuille est déjà soldé (solde = 0)");
+    }
+
+    const previousBalance = organization.wallet.currentBalance;
+    const currency = organization.wallet.currency;
+
+    try {
+      // 3. Transaction pour tout mettre à jour atomiquement
+      const result = await prisma.$transaction(async (tx) => {
+        // a. Mettre le wallet à 0
+        const updatedWallet = await tx.organizationWallet.update({
+          where: { organizationId },
+          data: {
+            currentBalance: 0,
+          },
+        });
+
+        // b. Créer une transaction de type "SETTLEMENT" pour tracer l'opération
+        await tx.transaction.create({
+          data: {
+            organizationId,
+            type: "WALLET_SETTLEMENT",
+            amount: Math.abs(previousBalance),
+            paymentStatus: "COMPLETED",
+            paymentMethod: "INTERNAL",
+            description: `Solde du portefeuille - Balance précédente: ${previousBalance} ${currency}`,
+            metadata: {
+              previousBalance,
+              newBalance: 0,
+              settledBy: userId,
+              settledAt: new Date().toISOString(),
+            },
+          },
+        });
+
+        // c. Créer un audit log détaillé
+        await tx.auditLog.create({
+          data: {
+            organizationId,
+            userId,
+            action: "SETTLE_WALLET",
+            resource: "OrganizationWallet",
+            resourceId: updatedWallet.id,
+            details: {
+              previousBalance,
+              newBalance: 0,
+              currency,
+              settledAt: new Date().toISOString(),
+              reason: "Manual wallet settlement by owner",
+            },
+          },
+        });
+
+        return updatedWallet;
+      });
+
+      return {
+        wallet: result,
+        previousBalance,
+        newBalance: 0,
+        currency,
+        message: `Portefeuille soldé avec succès. Solde précédent: ${previousBalance} ${currency}`,
+      };
+    } catch (error) {
+      console.error("Erreur lors du solde du wallet:", error);
+      throw new Error(`Impossible de solder le portefeuille: ${error.message}`);
+    }
+  }
+
   // Méthodes utilitaires privées
   #generateLoginId() {
     return Math.random().toString(36).substring(2, 10).toUpperCase();

@@ -69,6 +69,7 @@ enum TransactionType {
   DEBT_REPAYMENT
   FINE
   DONATION
+  WALLET_SETTLEMENT
   EXPENSE
   OTHER
 }

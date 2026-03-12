@@ -46,16 +46,7 @@ export default class AuthController {
 
       const result = await this.service.login(phone, password);
 
-      logger.info("🔐 ==================== LOGIN SUCCESS ====================");
-      logger.info(`User: ${result.user.email || result.user.phone}`);
-      logger.info(
-        `Setting cookies with config: secure=${COOKIE_CONFIG.ACCESS_TOKEN.secure}, sameSite=${COOKIE_CONFIG.ACCESS_TOKEN.sameSite}`,
-      );
-
       CookieManager.setAuthTokens(res, result.accessToken, result.refreshToken);
-
-      logger.info("✅ Cookies set in response headers");
-
       const { accessToken, refreshToken, ...userData } = result;
 
       return res.success(userData, "Connexion réussie");
