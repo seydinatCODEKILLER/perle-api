@@ -463,7 +463,7 @@ export default class MembershipService {
         userId: currentUserId,
         organizationId,
         status: "ACTIVE",
-        role: { in: ["ADMIN", "FINANCIAL_MANAGER"] },
+        role: { in: ["ADMIN", "FINANCIAL_MANAGER", "PRESIDENT", "VICE_PRESIDENT", "SECRETARY_GENERAL", "ORGANIZER"] },
       },
     });
 
