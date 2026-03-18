@@ -646,7 +646,6 @@ export default class OrganizationService {
       throw new Error("Cette organisation n'a pas de portefeuille");
     }
 
-    // 2. Vérifier que le wallet n'est pas déjà à 0
     if (organization.wallet.currentBalance === 0) {
       throw new Error("Le portefeuille est déjà soldé (solde = 0)");
     }
@@ -655,9 +654,7 @@ export default class OrganizationService {
     const currency = organization.wallet.currency;
 
     try {
-      // 3. Transaction pour tout mettre à jour atomiquement
       const result = await prisma.$transaction(async (tx) => {
-        // a. Mettre le wallet à 0
         const updatedWallet = await tx.organizationWallet.update({
           where: { organizationId },
           data: {
@@ -665,7 +662,9 @@ export default class OrganizationService {
           },
         });
 
-        // b. Créer une transaction de type "SETTLEMENT" pour tracer l'opération
+        // ✅ CORRECTION : Référence unique avec UUID
+        const reference = `SETTLE-${organizationId}-${Date.now()}-${Math.random().toString(36).substring(2, 9).toUpperCase()}`;
+
         await tx.transaction.create({
           data: {
             organizationId,
@@ -673,6 +672,7 @@ export default class OrganizationService {
             amount: Math.abs(previousBalance),
             paymentStatus: "COMPLETED",
             paymentMethod: "INTERNAL",
+            reference, // ✅ Ajout de la référence unique
             description: `Solde du portefeuille - Balance précédente: ${previousBalance} ${currency}`,
             metadata: {
               previousBalance,
@@ -683,7 +683,6 @@ export default class OrganizationService {
           },
         });
 
-        // c. Créer un audit log détaillé
         await tx.auditLog.create({
           data: {
             organizationId,
