@@ -8,7 +8,7 @@ export default class MembershipSchema {
       z.object({
         memberType: z.literal("existing"),
         phone: z.string().min(1, "Téléphone requis"),
-        role: z.enum(["ADMIN", "FINANCIAL_MANAGER", "MEMBER"]).optional(),
+        role: z.enum(["ADMIN", "FINANCIAL_MANAGER", "MEMBER", "PRESIDENT", "VICE_PRESIDENT", "SECRETARY_GENERAL", "ORGANIZER"]).optional(),
       }),
 
       z.object({
@@ -20,7 +20,7 @@ export default class MembershipSchema {
           email: z.string().email().optional(),
           gender: z.enum(["MALE", "FEMALE"]).optional(),
         }),
-        role: z.enum(["ADMIN", "FINANCIAL_MANAGER", "MEMBER"]).optional(),
+        role: z.enum(["ADMIN", "FINANCIAL_MANAGER", "MEMBER", "PRESIDENT", "VICE_PRESIDENT", "SECRETARY_GENERAL", "ORGANIZER"]).optional(),
       }),
     ]);
 
@@ -30,7 +30,7 @@ export default class MembershipSchema {
   validateUpdate(data) {
     const schema = z.object({
       role: z
-        .enum(["ADMIN", "FINANCIAL_MANAGER", "MEMBER"], {
+        .enum(["ADMIN", "FINANCIAL_MANAGER", "MEMBER", "PRESIDENT", "VICE_PRESIDENT", "SECRETARY_GENERAL", "ORGANIZER"], {
           message: "Rôle invalide",
         })
         .optional(),
@@ -53,7 +53,7 @@ export default class MembershipSchema {
 
   validateRoleUpdate(data) {
     const schema = z.object({
-      role: z.enum(["ADMIN", "FINANCIAL_MANAGER", "MEMBER"], {
+      role: z.enum(["ADMIN", "FINANCIAL_MANAGER", "MEMBER", "PRESIDENT", "VICE_PRESIDENT", "SECRETARY_GENERAL", "ORGANIZER"], {
         message: "Rôle invalide",
       }),
     });

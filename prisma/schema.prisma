@@ -18,6 +18,10 @@ datasource db {
 enum UserRole {
   SUPER_ADMIN
   ADMIN
+  PRESIDENT
+  VICE_PRESIDENT
+  SECRETARY_GENERAL
+  ORGANIZER
   MEMBER
 }
 

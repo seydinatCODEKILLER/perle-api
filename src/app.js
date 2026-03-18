@@ -4,7 +4,7 @@ import cookieParser from "cookie-parser";
 import responseHandler from "./middlewares/responseMiddleware.js";
 import logger from "./config/logger.js";
 import { getCorsOptions } from "./config/cors.js";
-// import { generalLimiter } from "./config/rateLimiter.js";
+import { generalLimiter } from "./config/rateLimiter.js";
 import httpLogger, { errorLogger } from "./utils/Httplogger.js";
 import {
   authRoute,
@@ -56,7 +56,7 @@ app.use(httpLogger);
 app.use(responseHandler);
 
 // ✅ Rate limiter général appliqué à toutes les routes API
-// app.use("/api", generalLimiter);
+app.use("/api", generalLimiter);
 
 // Logger middleware
 logger.info("API middlewares initialized");
