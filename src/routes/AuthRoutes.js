@@ -295,7 +295,7 @@ export default class AuthRoutes {
      *             schema:
      *               $ref: '#/components/schemas/Error'
      */
-    this.router.post("/login",authLimiter, (req, res) => this.controller.login(req, res));
+    this.router.post("/login", (req, res) => this.controller.login(req, res));
 
     /**
      * @swagger

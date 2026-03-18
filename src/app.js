@@ -56,7 +56,7 @@ app.use(httpLogger);
 app.use(responseHandler);
 
 // ✅ Rate limiter général appliqué à toutes les routes API
-app.use("/api", generalLimiter);
+// app.use("/api", generalLimiter);
 
 // Logger middleware
 logger.info("API middlewares initialized");
