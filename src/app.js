@@ -4,7 +4,7 @@ import cookieParser from "cookie-parser";
 import responseHandler from "./middlewares/responseMiddleware.js";
 import logger from "./config/logger.js";
 import { getCorsOptions } from "./config/cors.js";
-import { generalLimiter } from "./config/rateLimiter.js";
+// import { generalLimiter } from "./config/rateLimiter.js";
 import httpLogger, { errorLogger } from "./utils/Httplogger.js";
 import {
   authRoute,
