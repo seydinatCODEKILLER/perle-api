@@ -17,6 +17,7 @@ datasource db {
 
 enum UserRole {
   SUPER_ADMIN
+  FINANCIAL_MANAGER
   ADMIN
   PRESIDENT
   VICE_PRESIDENT
@@ -33,8 +34,13 @@ enum OrganizationType {
 }
 
 enum MembershipRole {
-  ADMIN
+  SUPER_ADMIN
   FINANCIAL_MANAGER
+  ADMIN
+  PRESIDENT
+  VICE_PRESIDENT
+  SECRETARY_GENERAL
+  ORGANIZER
   MEMBER
 }
 
