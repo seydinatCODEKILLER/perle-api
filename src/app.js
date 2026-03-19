@@ -78,7 +78,7 @@ app.use("/api/expenses", expenseRoute.routes);
 app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(specs));
 
 // Route par défaut pour vérifier que l'API tourne
-app.get("/", (req, res) => {
+app.get("/health", (req, res) => {
   res.status(200).json({ 
     message: "API is running",
     version: "1.0.0",
